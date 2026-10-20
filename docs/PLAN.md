@@ -1,0 +1,110 @@
+# Plan de réalisation
+
+## 1. Contrat de données
+
+Le périmètre retenu est un exporter Go pour tous les utilisateurs, avec ventilation par sport. Le dépôt est public ; les métriques et accès aux données restent privés.
+
+À confirmer avant l’implémentation :
+
+- Nombre d’utilisateurs et d’activités, taille de la table d’activités et fréquence d’import.
+- Besoin de suivi à partir de la première collecte ou de consultation de l’historique complet.
+- Inclusion des activités privées et traitement des activités masquées, doublons et comptes désactivés : l’accès SQL contourne les contrôles de visibilité du backend.
+- Destination des données : Prometheus local et, si souhaité, envoi vers un service distant.
+
+Le schéma étudié est celui du tag **v0.19.4**, pas la branche de développement. La table [`activities`](https://github.com/endurain-project/endurain/blob/v0.19.4/backend/app/activities/activity/models.py) contient notamment :
+
+| Colonne | Utilisation proposée |
+| --- | --- |
+| `user_id` | Identifiant de l’utilisateur |
+| `activity_type` | Identifiant du sport |
+| `distance` | Distance en mètres |
+| `total_timer_time` | Durée active en secondes |
+| `total_elapsed_time` | Durée écoulée, distincte de la durée active |
+| `elevation_gain` | Dénivelé positif en mètres, facultatif |
+| `calories` | Énergie en kilocalories, facultative |
+| `start_time`, `end_time` | Dates de l’activité |
+| `is_hidden`, `visibility` | Règles d’inclusion à préciser |
+
+Vérifier les types réels, les migrations et les index sur l’instance cible avec des requêtes de métadonnées. Comparer ensuite des agrégats à l’interface Endurain, sans extraire de notes privées, traces GPS ou identifiants d’intégration.
+
+## 2. Accès PostgreSQL
+
+- Créer un rôle de connexion dédié, sans privilèges d’administration, création, écriture ou appartenance au rôle applicatif.
+- Accorder `CONNECT`, `USAGE` sur le schéma et `SELECT` sur les seules colonnes nécessaires. Ne pas accorder de lecture globale des tables présentes ou futures.
+- Conserver les identifiants dans un gestionnaire de secrets en production ; prévoir la lecture depuis un fichier secret, sans afficher la chaîne de connexion dans les logs.
+- Définir des délais pour la connexion et les requêtes, un petit pool et des transactions explicitement en lecture seule.
+- Garder PostgreSQL sur un réseau privé. Valider le transport utilisé et activer une vérification TLS lorsqu’il traverse un réseau qui l’exige.
+- Le provisionnement des droits relève d’une étape d’administration séparée. Le binaire ne crée ni rôle, ni table, ni migration.
+
+Tests attendus : les agrégats sont lisibles ; écritures, DDL et lecture de colonnes privées sont refusés. Le mode transactionnel en lecture seule complète les permissions, il ne les remplace pas.
+
+## 3. Contrat Prometheus proposé
+
+Les métriques métier sont des **gauges** : une modification ou suppression d’activité peut faire baisser les totaux. Ne pas utiliser le suffixe `_total`, réservé aux counters, ni `rate()` ou `increase()` pour calculer le volume sportif depuis ces snapshots.
+
+| Métrique proposée | Sens | Labels |
+| --- | --- | --- |
+| `endurain_activities` | Nombre d’activités présentes | `user_id`, `sport_id`, `period` |
+| `endurain_activity_distance_meters` | Distance cumulée | `user_id`, `sport_id`, `period` |
+| `endurain_activity_duration_seconds` | Durée active cumulée | `user_id`, `sport_id`, `period` |
+| `endurain_activity_elevation_gain_meters` | Dénivelé positif connu | `user_id`, `sport_id`, `period` |
+| `endurain_activity_energy_joules` | Énergie connue, convertie depuis les kcal | `user_id`, `sport_id`, `period` |
+| `endurain_last_activity_timestamp_seconds` | Début de la dernière activité | `user_id`, `sport_id` |
+| `endurain_up` | 1 si la collecte réussit, 0 sinon | aucun |
+| `endurain_scrape_duration_seconds` | Durée de collecte | aucun |
+
+`period` possède seulement trois valeurs proposées : `all`, `7d`, `30d`. Les fenêtres de 7 et 30 jours sont des durées glissantes, calculées depuis un même instant UTC ; elles ne représentent pas des semaines ou mois calendaires. Les fenêtres se chevauchent : un dashboard doit en sélectionner une et ne pas les additionner.
+
+Pour le calcul de fréquence, le nombre d’activités sur 7 jours donne directement un nombre de séances par semaine glissante. La conversion en kilomètres, heures ou kilocalories se fait dans Grafana ; 1 kcal thermochimique vaut 4 184 J.
+
+Règles de justesse et de coût :
+
+- Grouper en SQL, sans charger toutes les activités dans la mémoire du binaire.
+- Distinguer une absence d’activité, une valeur facultative inconnue et une erreur de collecte. Une valeur `NULL` ne devient pas automatiquement une mesure à zéro ; documenter la couverture des agrégats facultatifs.
+- Sur panne SQL ou erreur de schéma, exposer `endurain_up 0` et omettre les métriques métier du scrape concerné, sans réémettre un ancien résultat comme actuel.
+- Produire les métriques depuis le résultat courant : les utilisateurs et sports supprimés doivent disparaître des scrapes suivants.
+- Aucun label par activité, date, titre, email, nom, lieu ou coordonnée GPS.
+- Mesurer et borner le budget de séries par utilisateur, sport et période. En cas de dépassement, signaler explicitement l’erreur ; ne jamais tronquer silencieusement les utilisateurs.
+- Des identifiants utilisateurs nécessitent une population bornée. Vérifier le volume avant de fixer le budget ; `topk()` dans Grafana ne réduit pas le nombre de séries ingérées.
+
+Références : [conventions de nommage](https://prometheus.io/docs/practices/naming/) et [écriture d’exporters](https://prometheus.io/docs/instrumenting/writing_exporters/).
+
+## 4. Implémentation Go
+
+- Utiliser `net/http`, la bibliothèque officielle [`prometheus/client_golang`](https://github.com/prometheus/client_golang) et le pilote PostgreSQL [`pgx`](https://github.com/jackc/pgx), avec versions fixées dans `go.mod` et `go.sum`.
+- Écrire un collecteur spécifique à Endurain : pas de moteur SQL configurable, d’ORM ou de plugin de collecte.
+- Fournir `/metrics`, un endpoint de vie du processus et un endpoint de disponibilité de la collecte clairement distincts.
+- Respecter l’annulation des requêtes, limiter le temps d’exécution HTTP et arrêter proprement le service.
+- Collecter à la demande pour commencer. Ajouter un cache seulement si une mesure de charge le justifie, avec âge des données visible.
+- Vérifier les plans d’exécution sur un volume représentatif avant de choisir la fréquence de scrape. Toute modification d’index de la base applicative doit être étudiée séparément.
+
+## 5. Validation et livraison
+
+Avant publication d’une version utilisable :
+
+- Tests unitaires : conversion des unités, dates aux limites des fenêtres, valeurs facultatives, labels et erreurs de collecte.
+- Tests d’intégration sur PostgreSQL 18 : données synthétiques de plusieurs utilisateurs et sports, activités modifiées ou supprimées, absence d’activité et permissions du rôle dédié.
+- Tests HTTP et exposition : scrapes consécutifs et concurrents, panne puis reprise de PostgreSQL, dépassement de délai et schéma incompatible.
+- CI : formatage, lint, `go vet`, tests avec détection de courses, compilation, analyse des vulnérabilités Go et de l’image.
+- `Dockerfile` multi-stage, images de base versionnées, binaire sous utilisateur non privilégié et `.dockerignore`.
+- `docker-compose.yml` pour une base existante et `docker-compose.dev.yml` avec PostgreSQL et données synthétiques ; healthchecks et dépendances cohérents.
+- `.env.example` complet avec uniquement des valeurs d’exemple sûres. Aucun secret réel ni dump de données utilisateur dans Git ou dans les fixtures.
+- `docker compose config --quiet`, démarrage de la stack de test et test de fumée des endpoints et de la collecte réelle.
+- Documenter l’installation des droits, la rotation des secrets, la compatibilité Endurain, le rollback et les procédures de sauvegarde/restauration de l’environnement de test. Ne pas introduire de migration des données Endurain.
+
+## 6. Intégration et preuve runtime
+
+- Ajouter le service à la stack Docker existante et à son réseau Endurain, ainsi qu’au réseau accessible à Prometheus, sans publier PostgreSQL ni les métriques sur Internet.
+- Utiliser le gestionnaire de secrets et le flux GitOps existants. Prévoir une authentification du scrape si la frontière réseau ne suffit pas.
+- Ajouter un job Prometheus dédié ; commencer par un intervalle de l’ordre de 1 à 5 minutes, à ajuster d’après les mesures SQL.
+- Examiner les règles `remote_write` avant le premier scrape : les métriques sportives par utilisateur peuvent être transmises aux destinations distantes déjà configurées.
+- Vérifier la révision déployée, les healthchecks, les droits réels et le résultat d’une collecte depuis Prometheus.
+- Comparer plusieurs utilisateurs et sports avec Endurain ; valider aussi les données absentes et la reprise après panne sur une stack de test.
+- Fournir un dashboard Grafana avec variables utilisateur/sport/période, volumes, fréquence, dernière activité et santé de la collecte.
+- Valider le rendu des tableaux de bord sur mobile et la distinction entre valeur nulle, zéro et collecte indisponible.
+
+Le pipeline vert ne prouve pas le déploiement : le statut opérationnel nécessite des métriques effectivement scrappées et des données affichées dans Grafana.
+
+## Hors du premier périmètre
+
+Pas d’interface web/PWA, de collecte GPS point par point, de données de sommeil ou de poids, de proxy vers Garmin/Strava, ni de reprise automatique de l’historique dans Prometheus. L’historique complet, s’il est demandé, fera l’objet d’un choix explicite de source et de stockage.

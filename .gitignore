@@ -1,0 +1,13 @@
+# Configuration locale et secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Sorties Go et couverture
+/bin/
+/dist/
+/coverage/
+*.test
+coverage.out
