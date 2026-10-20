@@ -55,6 +55,24 @@ Les tests d’intégration n’acceptent que la base nommée `endurain_exporter_
 
 L’installation sur une base existante, la configuration, les secrets, les requêtes Grafana et le rollback sont décrits dans [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
+## Images Docker Hub
+
+Le [Dockerfile](Dockerfile) produit une image minimale, sans shell, exécutée sous un utilisateur non privilégié, avec un healthcheck. Il permet de compiler pour `linux/amd64` et `linux/arm64`.
+
+Pour activer la publication, créer le dépôt public `endurain-prometheus-exporter` sur Docker Hub et configurer dans GitHub → Settings → Secrets and variables → Actions :
+
+| Type | Nom | Valeur |
+| --- | --- | --- |
+| Variable | `DOCKERHUB_USERNAME` | Compte utilisé pour se connecter à Docker Hub |
+| Variable | `DOCKERHUB_IMAGE` | `<compte-ou-organisation>/endurain-prometheus-exporter`, sans tag |
+| Secret | `DOCKERHUB_TOKEN` | Jeton Docker Hub avec les droits de lecture et d’écriture sur ce dépôt |
+
+Utiliser un [jeton d’accès Docker Hub](https://docs.docker.com/security/access-tokens/) pour la CI. Ne pas le placer dans Git, dans le `.env` applicatif ou dans les discussions.
+
+Après chaque push sur `main`, la CI exécute les tests PostgreSQL, les tests HTTP et les analyses de vulnérabilités avant de publier les deux architectures. Les tags sont `latest` et `sha-<commit-complet>`. La publication est désactivée tant que les deux variables GitHub ne sont pas renseignées ; les pull requests ne publient aucune image. Une première publication peut aussi être lancée depuis Actions → ci → Run workflow, sur `main`.
+
+Pour déployer une image publiée avec le Compose fourni, définir `EXPORTER_IMAGE=<compte-ou-organisation>/endurain-prometheus-exporter:sha-<commit-complet>` dans le fichier d’environnement privé, puis suivre [la procédure Docker](docs/OPERATIONS.md#image-publiée-ou-build-local). L’authentification HTTP par token reste facultative et indépendante de l’accès utilisé pour publier sur Docker Hub.
+
 ## Historique et confidentialité
 
 Un scrape expose les valeurs **au moment de la collecte**. Les anciennes activités contribuent immédiatement aux totaux, mais leurs valeurs ne sont pas automatiquement enregistrées dans Prometheus à leurs dates d’origine. Les imports tardifs et suppressions modifient également ces totaux.

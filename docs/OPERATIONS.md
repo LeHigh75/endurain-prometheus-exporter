@@ -39,7 +39,20 @@ Ne pas définir simultanément la variable directe et sa variante `_FILE`. Sans 
 
 Avec un agent OpenBao qui exporte des champs normalisés dans un `.env`, les champs `database.url` et `metrics.token` deviennent `DATABASE_URL` et `METRICS_TOKEN`. Préserver les autres champs avec un CAS lors des mises à jour KV v2. Vérifier la relecture dans Bao et le fichier rendu sans afficher leurs valeurs.
 
-Le Compose fourni consomme les variables directes, par exemple depuis un fichier rendu par l’agent. Il transmet aussi `METRICS_TOKEN_FILE` si cette variable est définie ; fournir alors le montage en lecture seule correspondant dans la stack :
+Le Compose fourni consomme les variables directes, par exemple depuis un fichier rendu par l’agent. Il transmet aussi `METRICS_TOKEN_FILE` si cette variable est définie ; fournir alors le montage en lecture seule correspondant dans la stack.
+
+## Image publiée ou build local
+
+Pour utiliser une image Docker Hub, définir `EXPORTER_IMAGE=<compte-ou-organisation>/endurain-prometheus-exporter:sha-<commit-complet>` dans le fichier d’environnement privé. Le tag correspondant à un commit ou, mieux, le digest identifie précisément l’image à déployer et à conserver pour un rollback. `latest` suit la dernière publication réussie de `main`.
+
+Depuis le répertoire contenant le Compose :
+
+```bash
+docker compose --env-file /chemin/prive/exporter.env config --quiet
+docker compose --env-file /chemin/prive/exporter.env up -d --no-build --pull always --wait
+```
+
+Pour construire localement depuis le code source, conserver la valeur par défaut `EXPORTER_IMAGE=endurain-prometheus-exporter:local` :
 
 ```bash
 docker compose --env-file /chemin/prive/exporter.env up -d --build --wait

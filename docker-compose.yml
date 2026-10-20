@@ -1,7 +1,7 @@
 services:
   exporter:
     build: .
-    image: endurain-prometheus-exporter:local
+    image: ${EXPORTER_IMAGE:-endurain-prometheus-exporter:local}
     restart: unless-stopped
     environment:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL required}
