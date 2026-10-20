@@ -25,36 +25,36 @@ Le collecteur utilise un pool de deux connexions, des transactions `REPEATABLE R
 
 ## Configuration et secrets
 
-Toutes les variables figurent dans [`.env.example`](../.env.example). Le binaire nécessite :
+Toutes les variables figurent dans [`.env.example`](../.env.example). Seule la connexion PostgreSQL est obligatoire ; les autres paramètres sont facultatifs :
 
 | Variable | Usage |
 | --- | --- |
 | `DATABASE_URL` ou `DATABASE_URL_FILE` | Connexion avec le rôle dédié ; fichier contenant uniquement l’URL si le mode fichier est choisi |
-| `METRICS_TOKEN` ou `METRICS_TOKEN_FILE` | Token de 32 à 4 096 caractères ASCII imprimables sans espace ; fichier contenant uniquement le token si le mode fichier est choisi |
+| `METRICS_TOKEN` ou `METRICS_TOKEN_FILE` | Authentification Bearer facultative ; token de 32 à 4 096 caractères ASCII imprimables sans espace, directement ou dans un fichier |
 | `LISTEN_ADDRESS` | Adresse HTTP, `:9808` par défaut |
 | `SCRAPE_TIMEOUT` | Budget global de collecte, `5s` par défaut ; de `1ms` à `1m` |
 | `MAX_SERIES` | Budget de séries métier, `20000` par défaut ; de `1` à `1000000` |
 
-Ne pas définir simultanément la variable directe et sa variante `_FILE`. Le token est obligatoire, ne passe jamais dans l’URL et doit être différent des tokens Kooizine et tarot. Les secrets sont chargés au démarrage : recréer ou redémarrer l’exporter après rotation.
+Ne pas définir simultanément la variable directe et sa variante `_FILE`. Sans token, l’exporter délègue le contrôle d’accès au réseau ou au reverse proxy choisi par l’administrateur. Avec un token, `/metrics` et `/readyz` exigent un en-tête Bearer valide ; le token n’est jamais accepté dans l’URL. Un fichier secret explicitement configuré doit être lisible et non vide : une erreur de fichier arrête le démarrage. Les secrets sont chargés au démarrage : recréer ou redémarrer l’exporter après rotation.
 
 Avec un agent OpenBao qui exporte des champs normalisés dans un `.env`, les champs `database.url` et `metrics.token` deviennent `DATABASE_URL` et `METRICS_TOKEN`. Préserver les autres champs avec un CAS lors des mises à jour KV v2. Vérifier la relecture dans Bao et le fichier rendu sans afficher leurs valeurs.
 
-Le Compose fourni consomme les variables directes, par exemple depuis un fichier rendu par l’agent :
+Le Compose fourni consomme les variables directes, par exemple depuis un fichier rendu par l’agent. Il transmet aussi `METRICS_TOKEN_FILE` si cette variable est définie ; fournir alors le montage en lecture seule correspondant dans la stack :
 
 ```bash
 docker compose --env-file /chemin/prive/exporter.env up -d --build --wait
 ```
 
-Définir aussi `ENDURAIN_NETWORK` avec le nom du réseau Docker de PostgreSQL. Le port HTTP est publié sur `127.0.0.1` par défaut. Prometheus doit partager un réseau avec l’exporter pour le joindre directement. Conserver PostgreSQL et l’exporter sur des réseaux privés ; utiliser HTTPS avec vérification des certificats si le trafic quitte cette frontière réseau.
+Définir aussi `ENDURAIN_NETWORK` avec le nom du réseau Docker de PostgreSQL. Le port HTTP est publié sur `127.0.0.1` par défaut. Prometheus doit partager un réseau avec l’exporter pour le joindre directement. L’administrateur choisit la protection HTTP adaptée à son installation, par exemple un réseau privé, un reverse proxy HTTPS ou le Bearer intégré.
 
 ## Endpoints et scrape
 
-- `GET /metrics` : `Authorization: Bearer <token>` obligatoire. Token absent ou incorrect : `401`, sans requête SQL. La réponse utilise `Cache-Control: no-store`.
+- `GET /metrics` : accès direct si aucun token n’est configuré. Avec un token configuré, un Bearer absent ou incorrect donne `401`, sans requête SQL. La réponse utilise `Cache-Control: no-store`.
 - `GET /healthz` : `200` lorsque le processus HTTP fonctionne ; n’interroge pas PostgreSQL.
-- `GET /readyz` : Bearer obligatoire ; `200` si la collecte complète est disponible, `503` en cas de panne, schéma incompatible ou budget dépassé.
-- Une collecte authentifiée en échec répond sur `/metrics` avec `endurain_up 0` et la durée de collecte, sans métriques métier anciennes, partielles ou mises à zéro.
+- `GET /readyz` : même mode d’authentification que `/metrics` ; `200` si la collecte complète est disponible, `503` en cas de panne, schéma incompatible ou budget dépassé.
+- Une collecte en échec répond sur `/metrics` avec `endurain_up 0` et la durée de collecte, sans métriques métier anciennes, partielles ou mises à zéro.
 
-Exemple à intégrer dans Prometheus lors de la phase de déploiement :
+Exemple Prometheus lorsque le Bearer intégré est activé :
 
 ```yaml
 scrape_configs:
@@ -68,7 +68,14 @@ scrape_configs:
       - targets: [endurain-exporter:9808]
 ```
 
-Le fichier d’identifiants doit contenir le token brut, sans préfixe `Bearer`, avec des permissions adaptées au compte Prometheus. Examiner les destinations `remote_write` avant le premier scrape de données réelles.
+Le fichier d’identifiants doit contenir le token brut, sans préfixe `Bearer`, avec des permissions adaptées au compte Prometheus. Sans authentification intégrée, retirer le bloc `authorization` ou l’adapter à la protection externe choisie. Examiner les destinations `remote_write` avant le premier scrape de données réelles.
+
+La stack de développement utilise un token de démonstration par défaut. Pour tester le mode sans authentification intégrée :
+
+```bash
+METRICS_TOKEN= docker compose -f docker-compose.dev.yml up -d --wait exporter
+METRICS_TOKEN= python3 tests/smoke.py
+```
 
 ## Données par utilisateur dans Grafana
 
@@ -98,7 +105,7 @@ Les fenêtres `7d` et `30d` sont glissantes. Les gauges reflètent les données 
 
 ## Rotation, rollback et sauvegardes
 
-Pour changer le token, mettre à jour son secret, redémarrer l’exporter et actualiser le fichier de Prometheus. Vérifier ensuite `401` sans token et une collecte avec `endurain_up 1` avec le nouveau token.
+Pour activer ou changer le token, mettre à jour son secret, redémarrer l’exporter et actualiser le fichier de Prometheus. Vérifier ensuite `401` sans token et une collecte avec `endurain_up 1` avec le nouveau token. Pour déléguer l’accès à une protection externe, retirer `METRICS_TOKEN` et `METRICS_TOKEN_FILE`, redémarrer l’exporter et adapter le scrape.
 
 Pour revenir à une version précédente, conserver son image identifiée par digest, la redéployer puis vérifier l’authentification, `/readyz` et un scrape. L’exporter ne conserve aucun état et n’effectue aucune migration ; son retrait ne supprime pas les données Endurain.
 

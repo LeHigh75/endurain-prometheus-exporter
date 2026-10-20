@@ -1,10 +1,10 @@
 # Plan de réalisation
 
-État : le rôle SQL, les requêtes, le collecteur Go et l’authentification Bearer sont implémentés. Les tests incluent PostgreSQL 18, plusieurs utilisateurs et sports, les permissions, les fenêtres temporelles, les erreurs et la reprise. Docker, Compose et une CI sont fournis. Le déploiement permanent et le dashboard restent à réaliser ; les éléments ci-dessous décrivent le contrat et ses validations.
+État : le rôle SQL, les requêtes, le collecteur Go et l’authentification Bearer facultative sont implémentés. Les tests incluent PostgreSQL 18, plusieurs utilisateurs et sports, les permissions, les fenêtres temporelles, les erreurs et la reprise. Docker, Compose et une CI sont fournis. Le déploiement permanent et le dashboard restent à réaliser ; les éléments ci-dessous décrivent le contrat et ses validations.
 
 ## 1. Contrat de données
 
-Le périmètre retenu est un exporter Go de statistiques individuelles : chaque métrique métier porte un label `user_id`. L’utilisateur est la dimension principale ; le sport permet de détailler ses activités. Le dépôt est public ; les métriques et accès aux données restent privés.
+Le périmètre retenu est un exporter Go de statistiques individuelles : chaque métrique métier porte un label `user_id`. L’utilisateur est la dimension principale ; le sport permet de détailler ses activités. Le dépôt est public ; l’administrateur choisit la politique d’accès aux métriques.
 
 La prise en charge de plusieurs utilisateurs et de plusieurs sports est une exigence dès la première version. Un utilisateur peut pratiquer plusieurs sports et un sport peut appartenir aux activités de plusieurs utilisateurs. Le volume observé lors d’une inspection ne limite pas ce périmètre.
 
@@ -14,7 +14,7 @@ La prise en charge de plusieurs utilisateurs et de plusieurs sports est une exig
 - Besoin de suivi à partir de la première collecte ou de consultation de l’historique complet.
 - Destination des données : Prometheus local et, si souhaité, envoi vers un service distant.
 
-Règles de la première version : tous les comptes sont inclus, y compris désactivés ; les activités privées contribuent aux agrégats individuels. Les activités avec `is_hidden = true` sont exclues. L’exporter ne déduplique pas les autres activités. Le token de scrape donne accès aux métriques de tous les utilisateurs.
+Règles de la première version : tous les comptes sont inclus, y compris désactivés ; les activités privées contribuent aux agrégats individuels. Les activités avec `is_hidden = true` sont exclues. L’exporter ne déduplique pas les autres activités. Lorsqu’il est configuré, le token de scrape donne accès aux métriques de tous les utilisateurs ; sinon, le contrôle d’accès relève de l’installation.
 
 Le schéma étudié est celui du tag **v0.19.4**, pas la branche de développement. La table [`activities`](https://github.com/endurain-project/endurain/blob/v0.19.4/backend/app/activities/activity/models.py) contient notamment :
 
@@ -97,7 +97,7 @@ Références : [conventions de nommage](https://prometheus.io/docs/practices/nam
 
 - Utiliser `net/http`, la bibliothèque officielle [`prometheus/client_golang`](https://github.com/prometheus/client_golang) et le pilote PostgreSQL [`pgx`](https://github.com/jackc/pgx), avec versions fixées dans `go.mod` et `go.sum`.
 - Écrire un collecteur spécifique à Endurain : pas de moteur SQL configurable, d’ORM ou de plugin de collecte.
-- Fournir `/metrics` avec Bearer obligatoire, `/healthz` pour la vie du processus et `/readyz` avec Bearer pour la disponibilité complète de la collecte. Sans token configuré, refuser le démarrage.
+- Fournir `/metrics` et `/readyz` avec Bearer facultatif, et `/healthz` pour la vie du processus. Sans token, autoriser les endpoints et laisser l’administrateur choisir une protection externe. Un token configuré impose l’authentification ; un fichier secret configuré mais illisible ou vide doit bloquer le démarrage.
 - Respecter l’annulation des requêtes, limiter le temps d’exécution HTTP et arrêter proprement le service.
 - Collecter à la demande pour commencer. Ajouter un cache seulement si une mesure de charge le justifie, avec âge des données visible.
 - Vérifier les plans d’exécution sur un volume représentatif avant de choisir la fréquence de scrape. Toute modification d’index de la base applicative doit être étudiée séparément.

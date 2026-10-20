@@ -31,7 +31,7 @@ func TestConfig(t *testing.T) {
 		t.Fatalf("unexpected defaults or configuration error: %v", err)
 	}
 	for _, tc := range []struct{ name, value string }{
-		{"DATABASE_URL", ""}, {"METRICS_TOKEN", ""}, {"METRICS_TOKEN", "too-short"},
+		{"DATABASE_URL", ""}, {"METRICS_TOKEN", "too-short"},
 		{"METRICS_TOKEN", testToken + "\n"}, {"METRICS_TOKEN", testToken + "\x7f"},
 		{"SCRAPE_TIMEOUT", "0s"}, {"SCRAPE_TIMEOUT", "-1s"}, {"SCRAPE_TIMEOUT", "2m"}, {"SCRAPE_TIMEOUT", "invalid"},
 		{"MAX_SERIES", "0"}, {"MAX_SERIES", "-1"}, {"MAX_SERIES", "1000001"}, {"MAX_SERIES", "invalid"},
@@ -49,6 +49,15 @@ func TestConfig(t *testing.T) {
 	c, err = loadConfig()
 	if err != nil || c.timeout != 2*time.Second || c.maxSeries != 100 || c.listen != "127.0.0.1:9809" {
 		t.Fatal("overrides not applied")
+	}
+}
+
+func TestTokenIsOptional(t *testing.T) {
+	cleanEnvironment(t)
+	t.Setenv("METRICS_TOKEN", "")
+	c, err := loadConfig()
+	if err != nil || c.token != "" {
+		t.Fatal("configuration without a token should be accepted")
 	}
 }
 

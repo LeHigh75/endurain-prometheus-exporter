@@ -46,14 +46,29 @@ func TestAuthenticationBeforeCollection(t *testing.T) {
 	if w.Code != 200 || calls.Load() != 1 || !strings.Contains(w.Body.String(), "endurain_up 1") {
 		t.Fatal("authenticated scrape failed")
 	}
+}
+
+func TestEndpointsWithoutBuiltinAuthentication(t *testing.T) {
+	c := testConfig()
+	c.token = ""
+	var calls int
+	handler := newHandler(c, func(context.Context) (snapshot, error) {
+		calls++
+		return snapshot{users: []int64{1}}, nil
+	})
 	for _, path := range []string{"/metrics", "/readyz"} {
-		w = scrape(newHandler(config{timeout: time.Second}, func(context.Context) (snapshot, error) {
-			t.Fatal("empty-token handler collected data")
-			return snapshot{}, nil
-		}), path, "Bearer ")
-		if w.Code != 401 {
-			t.Fatal("empty token allowed access")
+		for _, header := range []string{"", "Bearer wrong", "Basic external-proxy-auth"} {
+			w := scrape(handler, path, header)
+			if w.Code != http.StatusOK || w.Header().Get("Cache-Control") != "no-store" || w.Header().Get("WWW-Authenticate") != "" {
+				t.Fatalf("unexpected response without builtin authentication: %d", w.Code)
+			}
+			if path == "/metrics" && !strings.Contains(w.Body.String(), `endurain_user_info{user_id="1"} 1`) {
+				t.Fatal("metrics missing without builtin authentication")
+			}
 		}
+	}
+	if calls != 6 {
+		t.Fatal("endpoints did not collect without builtin authentication")
 	}
 }
 

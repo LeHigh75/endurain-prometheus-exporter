@@ -24,8 +24,6 @@ jobs:
       - name: Vet
         run: go vet ./...
       - name: Validate production Compose
-        env:
-          METRICS_TOKEN: development-only-metrics-token-change-me
         run: docker compose --env-file .env.example config --quiet
       - name: Validate development Compose
         run: docker compose -f docker-compose.dev.yml config --quiet
@@ -41,6 +39,12 @@ jobs:
         run: docker compose -f docker-compose.dev.yml up -d --build --wait exporter
       - name: Smoke test
         run: python3 tests/smoke.py
+      - name: Smoke test without builtin authentication
+        env:
+          METRICS_TOKEN: ""
+        run: |
+          docker compose -f docker-compose.dev.yml up -d --wait exporter
+          python3 tests/smoke.py
       - name: Scan image vulnerabilities
         run: >-
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock

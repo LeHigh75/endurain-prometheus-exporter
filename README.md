@@ -2,7 +2,7 @@
 
 Projet d’exporter Prometheus en Go pour les statistiques d’activité de chaque utilisateur d’[Endurain](https://github.com/endurain-project/endurain), avec détail par sport, à visualiser dans Grafana.
 
-**État : première implémentation.** Le collecteur Go, la protection Bearer, les droits SQL, Docker et les tests sont fournis. L’intégration à une stack Endurain et à Prometheus reste une étape de déploiement distincte.
+**État : première implémentation.** Le collecteur Go, l’authentification Bearer facultative, les droits SQL, Docker et les tests sont fournis. L’intégration à une stack Endurain et à Prometheus reste une étape de déploiement distincte.
 
 ## Architecture
 
@@ -29,17 +29,19 @@ Pour les statistiques de tous les utilisateurs, la lecture SQL évite de gérer 
 - Identifiants utilisateurs sans noms ni emails, y compris pour les comptes sans activité ; exclusion des activités marquées comme masquées, inclusion des activités privées.
 - Totaux sur les activités présentes en base et fenêtres glissantes de 7 et 30 jours.
 - Santé de la collecte et durée des requêtes.
-- Endpoint `/metrics` protégé par un token Bearer obligatoire, sans interface web.
+- Endpoint `/metrics` sans interface web ; protection au choix de l’administrateur : réseau, reverse proxy ou token Bearer facultatif.
 
 Les noms, unités, règles de filtrage et cas limites sont détaillés dans le [plan de réalisation](docs/PLAN.md).
+
+Sans `METRICS_TOKEN` ni `METRICS_TOKEN_FILE`, l’exporter n’applique pas d’authentification HTTP intégrée. Lorsqu’un token est configuré, `/metrics` et `/readyz` exigent `Authorization: Bearer <token>`.
 
 ## Démarrage et validation
 
 La stack de développement utilise uniquement des identifiants publics de démonstration et une base PostgreSQL isolée, conservée en mémoire :
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d --build --wait
-python3 tests/smoke.py
+METRICS_TOKEN=development-only-metrics-token-change-me docker compose -f docker-compose.dev.yml up -d --build --wait
+METRICS_TOKEN=development-only-metrics-token-change-me python3 tests/smoke.py
 ```
 
 Pour exécuter aussi les tests unitaires et d’intégration avec Go 1.27.3 :

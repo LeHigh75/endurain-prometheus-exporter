@@ -29,7 +29,7 @@ services:
     image: endurain-prometheus-exporter:test
     environment:
       DATABASE_URL: postgresql://endurain_exporter:development-only-exporter-password@database:5432/endurain_exporter_test?sslmode=disable
-      METRICS_TOKEN: development-only-metrics-token-change-me
+      METRICS_TOKEN: ${METRICS_TOKEN-development-only-metrics-token-change-me}
     ports:
       - "127.0.0.1:${EXPORTER_PORT:-9808}:9808"
     depends_on:

@@ -17,7 +17,7 @@ type config struct {
 	maxSeries   int
 }
 
-func secret(name string) (string, error) {
+func secret(name string, required bool) (string, error) {
 	value, file := os.Getenv(name), os.Getenv(name+"_FILE")
 	if value != "" && file != "" {
 		return "", fmt.Errorf("configure only %s or %s_FILE", name, name)
@@ -29,7 +29,7 @@ func secret(name string) (string, error) {
 		}
 		value = strings.TrimSpace(string(data))
 	}
-	if value == "" {
+	if value == "" && (required || file != "") {
 		return "", fmt.Errorf("%s or %s_FILE is required", name, name)
 	}
 	return value, nil
@@ -38,13 +38,13 @@ func secret(name string) (string, error) {
 func loadConfig() (config, error) {
 	c := config{listen: ":9808", timeout: 5 * time.Second, maxSeries: 20000}
 	var err error
-	if c.databaseURL, err = secret("DATABASE_URL"); err != nil {
+	if c.databaseURL, err = secret("DATABASE_URL", true); err != nil {
 		return c, err
 	}
-	if c.token, err = secret("METRICS_TOKEN"); err != nil {
+	if c.token, err = secret("METRICS_TOKEN", false); err != nil {
 		return c, err
 	}
-	if len(c.token) < 32 || len(c.token) > 4096 || strings.IndexFunc(c.token, func(r rune) bool { return r < 33 || r > 126 }) >= 0 {
+	if c.token != "" && (len(c.token) < 32 || len(c.token) > 4096 || strings.IndexFunc(c.token, func(r rune) bool { return r < 33 || r > 126 }) >= 0) {
 		return c, errors.New("METRICS_TOKEN must contain 32 to 4096 characters without whitespace")
 	}
 	if value := os.Getenv("LISTEN_ADDRESS"); value != "" {

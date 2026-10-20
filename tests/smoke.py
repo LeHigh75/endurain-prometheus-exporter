@@ -1,11 +1,11 @@
-"""Smoke-test the isolated development stack, using its public dummy token."""
+"""Smoke-test the isolated development stack with or without builtin auth."""
 
 import os
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 base = f"http://127.0.0.1:{os.environ.get('EXPORTER_PORT', '9808')}"
-token = "development-only-metrics-token-change-me"
+token = os.environ.get("METRICS_TOKEN", "development-only-metrics-token-change-me")
 
 
 def request(path, authorization=None):
@@ -17,17 +17,26 @@ def request(path, authorization=None):
         return error.code, error.headers, error.read().decode()
 
 
-for path in ["/metrics", "/readyz", "/metrics?token=" + token]:
-    for authorization in [None, "Bearer invalid"]:
-        status, headers, body = request(path, authorization)
-        assert status == 401, (path, status)
-        assert headers["Cache-Control"] == "no-store"
-        assert "endurain_user_info" not in body
+if token:
+    for path in ["/metrics", "/readyz", "/metrics?token=" + token]:
+        for authorization in [None, "Bearer invalid"]:
+            status, headers, body = request(path, authorization)
+            assert status == 401, (path, status)
+            assert headers["Cache-Control"] == "no-store"
+            assert "endurain_user_info" not in body
+else:
+    for path in ["/metrics", "/readyz"]:
+        for authorization in [None, "Basic external-proxy-auth"]:
+            status, headers, _ = request(path, authorization)
+            assert status == 200, (path, status)
+            assert headers.get("WWW-Authenticate") is None
+            assert headers["Cache-Control"] == "no-store"
 
 assert request("/healthz")[0] == 200
-assert request("/readyz", "Bearer " + token)[0] == 200
-status, headers, body = request("/metrics", "Bearer " + token)
+authorization = "Bearer " + token if token else None
+assert request("/readyz", authorization)[0] == 200
+status, headers, body = request("/metrics", authorization)
 assert status == 200 and "endurain_up 1\n" in body
 assert headers["Cache-Control"] == "no-store"
 assert "synthetic-alice" not in body and "@example.invalid" not in body
-print("Smoke OK: authentication, liveness, readiness and PostgreSQL collection")
+print("Smoke OK: configured auth mode, liveness, readiness and PostgreSQL collection")
