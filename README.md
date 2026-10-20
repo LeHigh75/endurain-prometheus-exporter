@@ -22,7 +22,8 @@ Pour les statistiques de tous les utilisateurs, la lecture SQL évite de gérer 
 
 ## Premier périmètre proposé
 
-- Statistiques pour chaque utilisateur, ventilées par sport.
+- Statistiques pour chaque utilisateur, ventilées par sport : un utilisateur peut pratiquer plusieurs sports et un même sport peut être pratiqué par plusieurs utilisateurs.
+- Détection automatique des nouveaux utilisateurs et sports présents dans les activités, sans identifiants ni liste de sports codés en dur.
 - Nombre d’activités, distance, durée active, dénivelé positif, énergie et date de dernière activité.
 - Totaux sur les activités présentes en base et fenêtres glissantes de 7 et 30 jours.
 - Santé de la collecte et durée des requêtes.

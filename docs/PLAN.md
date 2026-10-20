@@ -4,6 +4,8 @@
 
 Le périmètre retenu est un exporter Go pour tous les utilisateurs, avec ventilation par sport. Le dépôt est public ; les métriques et accès aux données restent privés.
 
+La prise en charge de plusieurs utilisateurs et de plusieurs sports est une exigence dès la première version. Un utilisateur peut pratiquer plusieurs sports et un sport peut appartenir aux activités de plusieurs utilisateurs. Le volume observé lors d’une inspection ne limite pas ce périmètre.
+
 À confirmer avant l’implémentation :
 
 - Nombre d’utilisateurs et d’activités, taille de la table d’activités et fréquence d’import.
@@ -53,6 +55,18 @@ Les métriques métier sont des **gauges** : une modification ou suppression d�
 | `endurain_up` | 1 si la collecte réussit, 0 sinon | aucun |
 | `endurain_scrape_duration_seconds` | Durée de collecte | aucun |
 
+Chaque couple observé `(user_id, activity_type)` possède ses propres agrégats SQL, calculés avec `GROUP BY user_id, activity_type`. `activity_type` devient le label `sport_id`. Aucun identifiant utilisateur ni liste de sports ne doit être codé en dur : les nouveaux couples doivent apparaître automatiquement aux collectes suivantes, y compris lorsqu’un code de sport est inconnu de l’exporter.
+
+Exemple synthétique de séries indépendantes :
+
+```prometheus
+endurain_activity_distance_meters{user_id="1",sport_id="1",period="all"} 12000
+endurain_activity_distance_meters{user_id="1",sport_id="2",period="all"} 5000
+endurain_activity_distance_meters{user_id="2",sport_id="1",period="all"} 8000
+```
+
+Grafana pourra filtrer chaque dimension ou agréger les sports d’un utilisateur et les utilisateurs d’un sport. Les totaux globaux seront calculés en PromQL, sans ajouter de séries « tous les utilisateurs » ou « tous les sports » qui provoqueraient un double comptage.
+
 `period` possède seulement trois valeurs proposées : `all`, `7d`, `30d`. Les fenêtres de 7 et 30 jours sont des durées glissantes, calculées depuis un même instant UTC ; elles ne représentent pas des semaines ou mois calendaires. Les fenêtres se chevauchent : un dashboard doit en sélectionner une et ne pas les additionner.
 
 Pour le calcul de fréquence, le nombre d’activités sur 7 jours donne directement un nombre de séances par semaine glissante. La conversion en kilomètres, heures ou kilocalories se fait dans Grafana ; 1 kcal thermochimique vaut 4 184 J.
@@ -83,7 +97,8 @@ Références : [conventions de nommage](https://prometheus.io/docs/practices/nam
 Avant publication d’une version utilisable :
 
 - Tests unitaires : conversion des unités, dates aux limites des fenêtres, valeurs facultatives, labels et erreurs de collecte.
-- Tests d’intégration sur PostgreSQL 18 : données synthétiques de plusieurs utilisateurs et sports, activités modifiées ou supprimées, absence d’activité et permissions du rôle dédié.
+- Tests d’intégration sur PostgreSQL 18 : au moins trois utilisateurs dont un sans activité, plusieurs sports pour un même utilisateur et un sport partagé entre utilisateurs ; vérifier les valeurs exactes de chaque couple pour détecter tout mélange d’agrégats.
+- Vérifier l’apparition automatique d’un nouvel utilisateur et d’un nouveau code de sport, les activités modifiées ou supprimées, l’absence d’activité et les permissions du rôle dédié.
 - Tests HTTP et exposition : scrapes consécutifs et concurrents, panne puis reprise de PostgreSQL, dépassement de délai et schéma incompatible.
 - CI : formatage, lint, `go vet`, tests avec détection de courses, compilation, analyse des vulnérabilités Go et de l’image.
 - `Dockerfile` multi-stage, images de base versionnées, binaire sous utilisateur non privilégié et `.dockerignore`.
