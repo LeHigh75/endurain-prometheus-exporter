@@ -2,9 +2,9 @@
 
 Projet d’exporter Prometheus en Go pour les statistiques d’activité de chaque utilisateur d’[Endurain](https://github.com/endurain-project/endurain), avec détail par sport, à visualiser dans Grafana.
 
-**État : initialisation et conception.** Ce dépôt contient le périmètre et le plan de réalisation ; aucun binaire, image Docker ou exporter opérationnel n’est encore fourni.
+**État : première implémentation.** Le collecteur Go, la protection Bearer, les droits SQL, Docker et les tests sont fournis. L’intégration à une stack Endurain et à Prometheus reste une étape de déploiement distincte.
 
-## Architecture proposée
+## Architecture
 
 ```text
 PostgreSQL Endurain ← SELECT seul — exporter Go ← scrape — Prometheus ← requêtes — Grafana
@@ -12,7 +12,7 @@ PostgreSQL Endurain ← SELECT seul — exporter Go ← scrape — Prometheus �
 
 L’exporter sera un service indépendant : il ne modifiera ni Endurain ni ses données. Un compte PostgreSQL dédié permettra uniquement la lecture des colonnes utiles aux agrégats.
 
-La première cible est **Endurain v0.19.4 avec PostgreSQL 18**. La structure réelle de la base devra être vérifiée avant de déclarer cette combinaison compatible.
+La première cible est **Endurain v0.19.4 avec PostgreSQL 18**. Les requêtes et les droits du compte dédié ont été vérifiés sur une instance de cette version ; les autres versions nécessitent une validation de leur schéma.
 
 ## Pourquoi PostgreSQL ?
 
@@ -26,11 +26,32 @@ Pour les statistiques de tous les utilisateurs, la lecture SQL évite de gérer 
 - Un utilisateur peut pratiquer plusieurs sports et un même sport peut être pratiqué par plusieurs utilisateurs.
 - Détection automatique des nouveaux utilisateurs et sports présents dans les activités, sans identifiants ni liste de sports codés en dur.
 - Nombre d’activités, distance, durée active, dénivelé positif, énergie et date de dernière activité.
+- Identifiants utilisateurs sans noms ni emails, y compris pour les comptes sans activité ; exclusion des activités marquées comme masquées, inclusion des activités privées.
 - Totaux sur les activités présentes en base et fenêtres glissantes de 7 et 30 jours.
 - Santé de la collecte et durée des requêtes.
-- Endpoint `/metrics` interne, sans interface web.
+- Endpoint `/metrics` protégé par un token Bearer obligatoire, sans interface web.
 
 Les noms, unités, règles de filtrage et cas limites sont détaillés dans le [plan de réalisation](docs/PLAN.md).
+
+## Démarrage et validation
+
+La stack de développement utilise uniquement des identifiants publics de démonstration et une base PostgreSQL isolée, conservée en mémoire :
+
+```bash
+docker compose -f docker-compose.dev.yml up -d --build --wait
+python3 tests/smoke.py
+```
+
+Pour exécuter aussi les tests unitaires et d’intégration avec Go 1.27.3 :
+
+```bash
+TEST_DATABASE_URL='postgresql://endurain_owner:development-only-owner-password@127.0.0.1:55432/endurain_exporter_test?sslmode=disable' go test -count=1 -race -coverprofile=coverage.out ./...
+go vet ./...
+```
+
+Les tests d’intégration n’acceptent que la base nommée `endurain_exporter_test`. Ils utilisent des données synthétiques et modifient cette base de test. Sans `TEST_DATABASE_URL`, ils sont ignorés ; les autres tests restent exécutés.
+
+L’installation sur une base existante, la configuration, les secrets, les requêtes Grafana et le rollback sont décrits dans [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
 ## Historique et confidentialité
 
@@ -40,13 +61,8 @@ Si les tableaux de bord doivent parcourir l’historique complet des activités,
 
 Un dépôt public ne signifie pas que `/metrics` sera public. Les métriques par utilisateur restent des données personnelles, même avec un identifiant numérique : limiter l’accès à Prometheus et aux tableaux de bord. Vérifier aussi les destinations `remote_write` avant de collecter des données réelles.
 
-## Prochaines étapes
+## Suite du projet
 
-1. Confirmer le volume de données et le besoin d’historique.
-2. Vérifier le schéma réel, les unités et les règles de confidentialité.
-3. Préparer les droits PostgreSQL minimaux et les requêtes d’agrégation.
-4. Développer et tester le collecteur Go et ses endpoints HTTP.
-5. Fournir Docker, Compose, configuration d’exemple et CI.
-6. Intégrer le scrape, vérifier les données en runtime, puis construire le dashboard Grafana.
+L’accès PostgreSQL dédié et le collecteur sont implémentés. Il reste à intégrer le service au déploiement cible, configurer son scrape et construire le dashboard par utilisateur. Le besoin de consultation de l’historique complet reste à préciser.
 
 Le détail et les critères de validation figurent dans [docs/PLAN.md](docs/PLAN.md).

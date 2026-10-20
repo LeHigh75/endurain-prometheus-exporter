@@ -1,0 +1,28 @@
+services:
+  exporter:
+    build: .
+    image: endurain-prometheus-exporter:local
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL required}
+      METRICS_TOKEN: ${METRICS_TOKEN:?METRICS_TOKEN required}
+      LISTEN_ADDRESS: ":9808"
+      SCRAPE_TIMEOUT: ${SCRAPE_TIMEOUT:-5s}
+      MAX_SERIES: ${MAX_SERIES:-20000}
+    ports:
+      - "127.0.0.1:${EXPORTER_PORT:-9808}:9808"
+    networks:
+      - endurain
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  endurain:
+    external: true
+    name: ${ENDURAIN_NETWORK:?ENDURAIN_NETWORK required}

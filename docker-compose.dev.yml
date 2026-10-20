@@ -1,0 +1,40 @@
+services:
+  database:
+    image: postgres:18@sha256:8ff36f3c66371cba71d20ceedccfc3de9669a68737607888c4ef0af93abe8e39
+    environment:
+      POSTGRES_DB: endurain_exporter_test
+      POSTGRES_USER: endurain_owner
+      POSTGRES_PASSWORD: development-only-owner-password
+    ports:
+      - "127.0.0.1:${TEST_POSTGRES_PORT:-55432}:5432"
+    volumes:
+      - ./tests/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./sql/grants.sql:/docker-entrypoint-initdb.d/02-grants.sql:ro
+      - ./tests/password.sql:/docker-entrypoint-initdb.d/03-password.sql:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          PGPASSWORD=development-only-exporter-password
+          psql -h 127.0.0.1 -U endurain_exporter -d "$${POSTGRES_DB}"
+          -w -qAt -v ON_ERROR_STOP=1 -c 'SELECT id FROM public.users LIMIT 0'
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    tmpfs:
+      - /var/lib/postgresql
+
+  exporter:
+    build: .
+    image: endurain-prometheus-exporter:test
+    environment:
+      DATABASE_URL: postgresql://endurain_exporter:development-only-exporter-password@database:5432/endurain_exporter_test?sslmode=disable
+      METRICS_TOKEN: development-only-metrics-token-change-me
+    ports:
+      - "127.0.0.1:${EXPORTER_PORT:-9808}:9808"
+    depends_on:
+      database:
+        condition: service_healthy
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]

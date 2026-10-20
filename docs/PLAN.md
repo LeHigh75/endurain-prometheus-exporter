@@ -1,5 +1,7 @@
 # Plan de réalisation
 
+État : le rôle SQL, les requêtes, le collecteur Go et l’authentification Bearer sont implémentés. Les tests incluent PostgreSQL 18, plusieurs utilisateurs et sports, les permissions, les fenêtres temporelles, les erreurs et la reprise. Docker, Compose et une CI sont fournis. Le déploiement permanent et le dashboard restent à réaliser ; les éléments ci-dessous décrivent le contrat et ses validations.
+
 ## 1. Contrat de données
 
 Le périmètre retenu est un exporter Go de statistiques individuelles : chaque métrique métier porte un label `user_id`. L’utilisateur est la dimension principale ; le sport permet de détailler ses activités. Le dépôt est public ; les métriques et accès aux données restent privés.
@@ -8,10 +10,11 @@ La prise en charge de plusieurs utilisateurs et de plusieurs sports est une exig
 
 À confirmer avant l’implémentation :
 
-- Nombre d’utilisateurs et d’activités, taille de la table d’activités et fréquence d’import.
+- Volume représentatif pour les tests de charge et fréquence d’import.
 - Besoin de suivi à partir de la première collecte ou de consultation de l’historique complet.
-- Inclusion des activités privées et traitement des activités masquées, doublons et comptes désactivés : l’accès SQL contourne les contrôles de visibilité du backend.
 - Destination des données : Prometheus local et, si souhaité, envoi vers un service distant.
+
+Règles de la première version : tous les comptes sont inclus, y compris désactivés ; les activités privées contribuent aux agrégats individuels. Les activités avec `is_hidden = true` sont exclues. L’exporter ne déduplique pas les autres activités. Le token de scrape donne accès aux métriques de tous les utilisateurs.
 
 Le schéma étudié est celui du tag **v0.19.4**, pas la branche de développement. La table [`activities`](https://github.com/endurain-project/endurain/blob/v0.19.4/backend/app/activities/activity/models.py) contient notamment :
 
@@ -46,11 +49,12 @@ Les métriques métier sont des **gauges** : une modification ou suppression d�
 
 | Métrique proposée | Sens | Labels |
 | --- | --- | --- |
+| `endurain_user_info` | Présence d’un utilisateur, même sans activité | `user_id` |
 | `endurain_activities` | Nombre d’activités présentes | `user_id`, `sport_id`, `period` |
 | `endurain_activity_distance_meters` | Distance cumulée | `user_id`, `sport_id`, `period` |
 | `endurain_activity_duration_seconds` | Durée active cumulée | `user_id`, `sport_id`, `period` |
-| `endurain_activity_elevation_gain_meters` | Dénivelé positif connu | `user_id`, `sport_id`, `period` |
-| `endurain_activity_energy_joules` | Énergie connue, convertie depuis les kcal | `user_id`, `sport_id`, `period` |
+| `endurain_activity_elevation_gain_meters` | Dénivelé positif, si toutes les valeurs de la période sont connues | `user_id`, `sport_id`, `period` |
+| `endurain_activity_energy_joules` | Énergie, si toutes les valeurs de la période sont connues, convertie depuis les kcal | `user_id`, `sport_id`, `period` |
 | `endurain_last_activity_timestamp_seconds` | Début de la dernière activité | `user_id`, `sport_id` |
 | `endurain_up` | 1 si la collecte réussit, 0 sinon | aucun |
 | `endurain_scrape_duration_seconds` | Durée de collecte | aucun |
@@ -73,18 +77,18 @@ sum by (user_id) (endurain_activity_distance_meters{period="all"})
 
 Les totaux sont calculés en PromQL depuis les séries par sport. La date de dernière activité utilise `max by (user_id)` sur `endurain_last_activity_timestamp_seconds`.
 
-`period` possède seulement trois valeurs proposées : `all`, `7d`, `30d`. Les fenêtres de 7 et 30 jours sont des durées glissantes, calculées depuis un même instant UTC ; elles ne représentent pas des semaines ou mois calendaires. Les fenêtres se chevauchent : un dashboard doit en sélectionner une et ne pas les additionner.
+`period` possède seulement trois valeurs : `all`, `7d`, `30d`. Les fenêtres de 7 et 30 jours sont des durées glissantes, calculées depuis un même instant UTC, bornes incluses et dates futures exclues ; elles ne représentent pas des semaines ou mois calendaires. `all` inclut toutes les activités présentes, y compris datées dans le futur. Les fenêtres se chevauchent : un dashboard doit en sélectionner une et ne pas les additionner.
 
 Pour le calcul de fréquence, le nombre d’activités sur 7 jours donne directement un nombre de séances par semaine glissante. La conversion en kilomètres, heures ou kilocalories se fait dans Grafana ; 1 kcal thermochimique vaut 4 184 J.
 
 Règles de justesse et de coût :
 
 - Grouper en SQL, sans charger toutes les activités dans la mémoire du binaire.
-- Distinguer une absence d’activité, une valeur facultative inconnue et une erreur de collecte. Une valeur `NULL` ne devient pas automatiquement une mesure à zéro ; documenter la couverture des agrégats facultatifs.
+- Distinguer une absence d’activité, une valeur facultative inconnue et une erreur de collecte. Pour le dénivelé et l’énergie, omettre l’agrégat du couple utilisateur/sport/période si une valeur manque ou si la période est vide. Ne pas présenter une somme partielle comme un total individuel : voir les requêtes Grafana dans `OPERATIONS.md`.
 - Sur panne SQL ou erreur de schéma, exposer `endurain_up 0` et omettre les métriques métier du scrape concerné, sans réémettre un ancien résultat comme actuel.
 - Produire les métriques depuis le résultat courant : les utilisateurs et sports supprimés doivent disparaître des scrapes suivants.
 - Aucun label par activité, date, titre, email, nom, lieu ou coordonnée GPS.
-- Mesurer et borner le budget de séries par utilisateur, sport et période. En cas de dépassement, signaler explicitement l’erreur ; ne jamais tronquer silencieusement les utilisateurs.
+- Borner le budget de séries métier avec `MAX_SERIES` (20 000 par défaut, hors deux métriques de santé). En cas de dépassement, exposer `endurain_up 0`, omettre les métriques métier et journaliser `series_budget` ; ne jamais tronquer silencieusement les utilisateurs.
 - Des identifiants utilisateurs nécessitent une population bornée. Vérifier le volume avant de fixer le budget ; `topk()` dans Grafana ne réduit pas le nombre de séries ingérées.
 
 Références : [conventions de nommage](https://prometheus.io/docs/practices/naming/) et [écriture d’exporters](https://prometheus.io/docs/instrumenting/writing_exporters/).
@@ -93,7 +97,7 @@ Références : [conventions de nommage](https://prometheus.io/docs/practices/nam
 
 - Utiliser `net/http`, la bibliothèque officielle [`prometheus/client_golang`](https://github.com/prometheus/client_golang) et le pilote PostgreSQL [`pgx`](https://github.com/jackc/pgx), avec versions fixées dans `go.mod` et `go.sum`.
 - Écrire un collecteur spécifique à Endurain : pas de moteur SQL configurable, d’ORM ou de plugin de collecte.
-- Fournir `/metrics`, un endpoint de vie du processus et un endpoint de disponibilité de la collecte clairement distincts.
+- Fournir `/metrics` avec Bearer obligatoire, `/healthz` pour la vie du processus et `/readyz` avec Bearer pour la disponibilité complète de la collecte. Sans token configuré, refuser le démarrage.
 - Respecter l’annulation des requêtes, limiter le temps d’exécution HTTP et arrêter proprement le service.
 - Collecter à la demande pour commencer. Ajouter un cache seulement si une mesure de charge le justifie, avec âge des données visible.
 - Vérifier les plans d’exécution sur un volume représentatif avant de choisir la fréquence de scrape. Toute modification d’index de la base applicative doit être étudiée séparément.
