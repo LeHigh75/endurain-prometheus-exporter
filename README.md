@@ -1,6 +1,6 @@
 # endurain-prometheus-exporter
 
-Projet d’exporter Prometheus en Go pour les statistiques d’activité d’[Endurain](https://github.com/endurain-project/endurain), par utilisateur et par sport, à visualiser dans Grafana.
+Projet d’exporter Prometheus en Go pour les statistiques d’activité de chaque utilisateur d’[Endurain](https://github.com/endurain-project/endurain), avec détail par sport, à visualiser dans Grafana.
 
 **État : initialisation et conception.** Ce dépôt contient le périmètre et le plan de réalisation ; aucun binaire, image Docker ou exporter opérationnel n’est encore fourni.
 
@@ -22,7 +22,8 @@ Pour les statistiques de tous les utilisateurs, la lecture SQL évite de gérer 
 
 ## Premier périmètre proposé
 
-- Statistiques pour chaque utilisateur, ventilées par sport : un utilisateur peut pratiquer plusieurs sports et un même sport peut être pratiqué par plusieurs utilisateurs.
+- L’utilisateur est la dimension principale : chacun possède ses propres statistiques et ses totaux tous sports confondus dans Grafana, avec une répartition par sport.
+- Un utilisateur peut pratiquer plusieurs sports et un même sport peut être pratiqué par plusieurs utilisateurs.
 - Détection automatique des nouveaux utilisateurs et sports présents dans les activités, sans identifiants ni liste de sports codés en dur.
 - Nombre d’activités, distance, durée active, dénivelé positif, énergie et date de dernière activité.
 - Totaux sur les activités présentes en base et fenêtres glissantes de 7 et 30 jours.

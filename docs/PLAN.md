@@ -2,7 +2,7 @@
 
 ## 1. Contrat de données
 
-Le périmètre retenu est un exporter Go pour tous les utilisateurs, avec ventilation par sport. Le dépôt est public ; les métriques et accès aux données restent privés.
+Le périmètre retenu est un exporter Go de statistiques individuelles : chaque métrique métier porte un label `user_id`. L’utilisateur est la dimension principale ; le sport permet de détailler ses activités. Le dépôt est public ; les métriques et accès aux données restent privés.
 
 La prise en charge de plusieurs utilisateurs et de plusieurs sports est une exigence dès la première version. Un utilisateur peut pratiquer plusieurs sports et un sport peut appartenir aux activités de plusieurs utilisateurs. Le volume observé lors d’une inspection ne limite pas ce périmètre.
 
@@ -65,7 +65,13 @@ endurain_activity_distance_meters{user_id="1",sport_id="2",period="all"} 5000
 endurain_activity_distance_meters{user_id="2",sport_id="1",period="all"} 8000
 ```
 
-Grafana pourra filtrer chaque dimension ou agréger les sports d’un utilisateur et les utilisateurs d’un sport. Les totaux globaux seront calculés en PromQL, sans ajouter de séries « tous les utilisateurs » ou « tous les sports » qui provoqueraient un double comptage.
+Le dashboard Grafana sera centré sur la sélection d’un utilisateur, avec ses totaux tous sports confondus et sa répartition par sport. Par exemple, les distances de l’exemple donnent 17 000 m pour l’utilisateur `1` et 8 000 m pour l’utilisateur `2` :
+
+```promql
+sum by (user_id) (endurain_activity_distance_meters{period="all"})
+```
+
+Les totaux sont calculés en PromQL depuis les séries par sport. La date de dernière activité utilise `max by (user_id)` sur `endurain_last_activity_timestamp_seconds`.
 
 `period` possède seulement trois valeurs proposées : `all`, `7d`, `30d`. Les fenêtres de 7 et 30 jours sont des durées glissantes, calculées depuis un même instant UTC ; elles ne représentent pas des semaines ou mois calendaires. Les fenêtres se chevauchent : un dashboard doit en sélectionner une et ne pas les additionner.
 
@@ -97,7 +103,7 @@ Références : [conventions de nommage](https://prometheus.io/docs/practices/nam
 Avant publication d’une version utilisable :
 
 - Tests unitaires : conversion des unités, dates aux limites des fenêtres, valeurs facultatives, labels et erreurs de collecte.
-- Tests d’intégration sur PostgreSQL 18 : au moins trois utilisateurs dont un sans activité, plusieurs sports pour un même utilisateur et un sport partagé entre utilisateurs ; vérifier les valeurs exactes de chaque couple pour détecter tout mélange d’agrégats.
+- Tests d’intégration sur PostgreSQL 18 : au moins trois utilisateurs dont un sans activité, plusieurs sports pour un même utilisateur et un sport partagé entre utilisateurs ; vérifier les valeurs exactes de chaque couple et les totaux individuels tous sports confondus pour détecter tout mélange d’agrégats.
 - Vérifier l’apparition automatique d’un nouvel utilisateur et d’un nouveau code de sport, les activités modifiées ou supprimées, l’absence d’activité et les permissions du rôle dédié.
 - Tests HTTP et exposition : scrapes consécutifs et concurrents, panne puis reprise de PostgreSQL, dépassement de délai et schéma incompatible.
 - CI : formatage, lint, `go vet`, tests avec détection de courses, compilation, analyse des vulnérabilités Go et de l’image.
@@ -115,7 +121,7 @@ Avant publication d’une version utilisable :
 - Examiner les règles `remote_write` avant le premier scrape : les métriques sportives par utilisateur peuvent être transmises aux destinations distantes déjà configurées.
 - Vérifier la révision déployée, les healthchecks, les droits réels et le résultat d’une collecte depuis Prometheus.
 - Comparer plusieurs utilisateurs et sports avec Endurain ; valider aussi les données absentes et la reprise après panne sur une stack de test.
-- Fournir un dashboard Grafana avec variables utilisateur/sport/période, volumes, fréquence, dernière activité et santé de la collecte.
+- Fournir un dashboard Grafana centré sur l’utilisateur sélectionné, avec ses volumes, sa fréquence, sa dernière activité, des filtres sport/période et la santé de la collecte.
 - Valider le rendu des tableaux de bord sur mobile et la distinction entre valeur nulle, zéro et collecte indisponible.
 
 Le pipeline vert ne prouve pas le déploiement : le statut opérationnel nécessite des métriques effectivement scrappées et des données affichées dans Grafana.
