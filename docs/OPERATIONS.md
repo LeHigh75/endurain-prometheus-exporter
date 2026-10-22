@@ -21,7 +21,7 @@ docker exec -it <conteneur-postgresql> sh -c \
 
 Le mot de passe n’est ainsi pas placé dans la ligne de commande. Utiliser un mot de passe aléatoire indépendant et le conserver dans le gestionnaire de secrets. Le rôle dispose d’au plus trois connexions et démarre avec des transactions en lecture seule, des requêtes limitées à cinq secondes et une attente de verrou limitée à une seconde. Les permissions empêchent les écritures même si une connexion désactive son mode lecture seule.
 
-Le collecteur utilise un pool de deux connexions, des transactions `REPEATABLE READ READ ONLY` et les deux requêtes d’un même snapshot. Aucune migration ou création de schéma n’est exécutée par le binaire.
+Le collecteur utilise un pool de deux connexions, des transactions `REPEATABLE READ READ ONLY` et les requêtes d’un même snapshot. Aucune migration ou création de schéma n’est exécutée par le binaire.
 
 ## Configuration et secrets
 
@@ -33,6 +33,7 @@ Toutes les variables figurent dans [`.env.example`](../.env.example). Seule la c
 | `METRICS_TOKEN` ou `METRICS_TOKEN_FILE` | Authentification Bearer facultative ; token de 32 à 4 096 caractères ASCII imprimables sans espace, directement ou dans un fichier |
 | `LISTEN_ADDRESS` | Adresse HTTP, `:9808` par défaut |
 | `SCRAPE_TIMEOUT` | Budget global de collecte, `5s` par défaut ; de `1ms` à `1m` |
+| `ACTIVITY_DETAILS` | `false` par défaut ; active les statistiques par activité et leurs titres après application de `sql/grants-details.sql` |
 | `MAX_SERIES` | Budget de séries métier, `20000` par défaut ; de `1` à `1000000` |
 
 Ne pas définir simultanément la variable directe et sa variante `_FILE`. Sans token, l’exporter délègue le contrôle d’accès au réseau ou au reverse proxy choisi par l’administrateur. Avec un token, `/metrics` et `/readyz` exigent un en-tête Bearer valide ; le token n’est jamais accepté dans l’URL. Un fichier secret explicitement configuré doit être lisible et non vide : une erreur de fichier arrête le démarrage. Les secrets sont chargés au démarrage : recréer ou redémarrer l’exporter après rotation.
@@ -92,7 +93,7 @@ METRICS_TOKEN= python3 tests/smoke.py
 
 ## Données par utilisateur dans Grafana
 
-Le label `user_id` identifie toujours l’utilisateur. `sport_id` reprend le code numérique Endurain, sans liste figée de sports. Les activités privées sont incluses ; `is_hidden = true` est exclu. Tous les comptes sont inventoriés via `endurain_user_info`, y compris sans activité ou désactivés. Aucun nom, email, titre ou parcours n’est exporté.
+Le label `user_id` identifie toujours l’utilisateur. `sport_id` reprend le code numérique Endurain, sans liste figée de sports. Les activités privées sont incluses ; `is_hidden = true` est exclu. Tous les comptes sont inventoriés via `endurain_user_info`, y compris sans activité ou désactivés. Aucun nom d’utilisateur, email ou parcours n’est exporté. Le mode facultatif `ACTIVITY_DETAILS=true` exporte les titres des activités et leurs statistiques ; appliquer `sql/grants-details.sql` après les droits de base. Ce mode partage le budget `MAX_SERIES` avec les agrégats (6 à 19 séries par activité), sans troncature silencieuse. Pour le désactiver, remettre `ACTIVITY_DETAILS=false` et recréer le conteneur.
 
 Pour les comptes sans activité, aucune combinaison de sport artificielle n’est créée. Le nombre d’activités peut être affiché à zéro avec :
 

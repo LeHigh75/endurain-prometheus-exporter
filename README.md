@@ -2,7 +2,7 @@
 
 A Go exporter that reads [Endurain](https://github.com/endurain-project/endurain)'s PostgreSQL database using a dedicated read-only account. It exposes activity statistics **per user and sport** at `/metrics` for Prometheus and Grafana.
 
-Verified with **Endurain v0.19.4 and PostgreSQL 18**. Hidden activities are excluded; private activities are included. Names, emails and GPS tracks are not exported.
+Compatible schemas verified on **Endurain v0.19.4 and v0.20.1 with PostgreSQL 18**. Hidden activities are excluded; private activities are included. User names, emails and GPS tracks are not exported. Optional activity details include activity titles.
 
 ## Port
 
@@ -63,6 +63,8 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       METRICS_TOKEN: ${METRICS_TOKEN:-}
+      ACTIVITY_DETAILS: ${ACTIVITY_DETAILS:-false}
+      MAX_SERIES: ${MAX_SERIES:-20000}
     ports:
       - "127.0.0.1:9808:9808"
     networks:
@@ -116,3 +118,43 @@ All metrics are **gauges**. Do not use `rate()` or `increase()` on these values.
 Activity totals use `user_id`, `sport_id` and `period` labels. `period` is `all`, `7d` or `30d`; rolling windows use the activity date. The latest activity timestamp uses `user_id` and `sport_id`; `endurain_user_info` uses only `user_id`. The two collection health metrics have no labels.
 
 Elevation and energy are omitted for a sport/period if any activity lacks that measurement or the period is empty. On collection failure, business metrics are omitted rather than replaced with zero. Prometheus history starts when scraping starts; old activities contribute to totals without backfilling their original dates.
+
+### Optional activity details
+
+Set `ACTIVITY_DETAILS=true` in `.env` to expose every non-hidden activity, including private activities, with its ID and title. Apply [sql/grants-details.sql](sql/grants-details.sql) once after the base permissions:
+
+```sql
+GRANT SELECT (
+  id, name, total_elapsed_time, end_time, average_speed, max_speed,
+  elevation_loss, average_hr, max_hr, average_power, max_power,
+  normalized_power, average_cad, max_cad, pace
+) ON public.activities TO endurain_exporter;
+```
+
+These additional gauges use `user_id`, `sport_id` and `activity_id`, without a `period` label. Only `endurain_activity_detail_info` also includes `activity_name`. Missing measurements are omitted; recorded zero values are preserved. Speeds and pace are read directly from Endurain, not recalculated.
+
+| Metric | Meaning |
+| --- | --- |
+| `endurain_activity_detail_info` | Activity exists, with its title; value `1` |
+| `endurain_activity_detail_distance_meters` | Distance |
+| `endurain_activity_detail_duration_seconds` | Active timer duration |
+| `endurain_activity_detail_elapsed_seconds` | Elapsed duration including pauses |
+| `endurain_activity_detail_start_timestamp_seconds` | Start date as Unix seconds |
+| `endurain_activity_detail_end_timestamp_seconds` | End date as Unix seconds |
+| `endurain_activity_detail_average_speed_meters_per_second` | Recorded average speed |
+| `endurain_activity_detail_max_speed_meters_per_second` | Recorded maximum speed |
+| `endurain_activity_detail_elevation_gain_meters` | Elevation gain |
+| `endurain_activity_detail_elevation_loss_meters` | Elevation loss |
+| `endurain_activity_detail_energy_joules` | Energy; 1 kcal = 4,184 J |
+| `endurain_activity_detail_average_heart_rate_beats_per_minute` | Average heart rate |
+| `endurain_activity_detail_max_heart_rate_beats_per_minute` | Maximum heart rate |
+| `endurain_activity_detail_average_power_watts` | Average power |
+| `endurain_activity_detail_max_power_watts` | Maximum power |
+| `endurain_activity_detail_normalized_power_watts` | Normalized power |
+| `endurain_activity_detail_average_cadence_per_minute` | Recorded average cadence; interpretation depends on sport/source |
+| `endurain_activity_detail_max_cadence_per_minute` | Recorded maximum cadence; interpretation depends on sport/source |
+| `endurain_activity_detail_pace_seconds_per_meter` | Recorded pace |
+
+All activities remain available regardless of Grafana's time range while they are stored in Endurain and scraped. The timestamp metric is the activity date; Prometheus samples retain the scrape time.
+
+`MAX_SERIES` defaults to `20000` and covers both aggregates and details: each activity adds 6 to 19 series. If the total exceeds this limit, the entire collection fails with `endurain_up 0`; nothing is silently truncated. Increase the limit deliberately as your activity history grows, or disable details to retain only aggregates. The access control on `/metrics` covers every user's data.

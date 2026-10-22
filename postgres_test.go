@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"strings"
 	"testing"
@@ -52,13 +53,22 @@ func TestPostgres(t *testing.T) {
 	roleConfig.User = "endurain_exporter"
 	roleConfig.Password = "development-only-exporter-password"
 	c := testConfig()
-	c.databaseURL = roleConfig.ConnString()
+	roleURL, err := neturl.Parse(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	roleURL.User = neturl.UserPassword(roleConfig.User, roleConfig.Password)
+	c.databaseURL = roleURL.String()
 	pool, err := newPool(ctx, c)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(pool.Close)
-	load := func(ctx context.Context) (snapshot, error) { return readSnapshot(ctx, pool, c.maxSeries) }
+	var poolUser string
+	if err := pool.QueryRow(ctx, "SELECT current_user").Scan(&poolUser); err != nil || poolUser != "endurain_exporter" {
+		t.Fatal("integration pool must use the least-privileged role")
+	}
+	load := func(ctx context.Context) (snapshot, error) { return readSnapshot(ctx, pool, c.maxSeries, false) }
 	handler := newHandler(c, load)
 
 	t.Run("multiple_users_sports_and_windows", func(t *testing.T) {
@@ -94,6 +104,61 @@ func TestPostgres(t *testing.T) {
 		}
 		if totals[1] != 18000 || totals[2] != 8000 || totals[3] != 0 {
 			t.Fatalf("incorrect per-user totals: %v", totals)
+		}
+	})
+
+	t.Run("individual_details_opt_in_units_and_permissions", func(t *testing.T) {
+		if _, err := admin.Exec(ctx, `UPDATE activities SET name='Synthetic ride "quoted"',total_elapsed_time=900,end_time=start_time+interval '900 seconds',average_speed=5.5,max_speed=9,average_hr=120,max_hr=150,average_power=200,max_power=400,normalized_power=220,average_cad=80,max_cad=100,pace=0.2,elevation_loss=20 WHERE id=1`); err != nil {
+			t.Fatal(err)
+		}
+		details, err := readSnapshot(ctx, pool, 20000, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := readSnapshot(ctx, pool, 18, true); !errors.Is(err, errSeriesBudget) {
+			t.Fatal("individual detail SQL result budget not enforced")
+		}
+		if len(details.details) != 4 {
+			t.Fatalf("hidden activity included or activity lost: %d", len(details.details))
+		}
+		families := gather(t, details, 20000)
+		labels := map[string]string{"user_id": "1", "sport_id": "1", "activity_id": "1"}
+		for name, want := range map[string]float64{"distance_meters": 12000, "duration_seconds": 600, "elapsed_seconds": 900, "average_speed_meters_per_second": 5.5, "max_speed_meters_per_second": 9, "energy_joules": 418400, "average_heart_rate_beats_per_minute": 120, "max_heart_rate_beats_per_minute": 150, "average_power_watts": 200, "max_power_watts": 400, "normalized_power_watts": 220, "average_cadence_per_minute": 80, "max_cadence_per_minute": 100, "pace_seconds_per_meter": 0.2, "elevation_loss_meters": 20} {
+			requireMetric(t, families, "endurain_activity_detail_"+name, labels, want)
+		}
+		for _, row := range details.details {
+			if row.id == 1 && (row.values[3].Float64 != float64(now.Add(-24*time.Hour).UnixMicro())/1e6 || row.values[4].Float64-row.values[3].Float64 != 900) {
+				t.Fatal("activity timestamps changed")
+			}
+			if row.id == 5 {
+				t.Fatal("hidden activity escaped filter")
+			}
+		}
+		requireMetric(t, families, "endurain_activity_detail_info", map[string]string{"user_id": "1", "sport_id": "1", "activity_id": "1", "activity_name": `Synthetic ride "quoted"`}, 1)
+		c.activityDetails = true
+		detailHandler := newHandler(c, func(ctx context.Context) (snapshot, error) { return readSnapshot(ctx, pool, c.maxSeries, true) })
+		response := scrape(detailHandler, "/metrics", "Bearer "+testToken)
+		if !strings.Contains(response.Body.String(), "endurain_activity_detail_info{") || strings.Contains(response.Body.String(), "synthetic-alice") {
+			t.Fatal("detail HTTP exposition failed or exposed a user name")
+		}
+		base, err := load(ctx)
+		if err != nil || len(base.details) != 0 {
+			t.Fatal("details are not opt-in")
+		}
+		// A missing optional grant must fail closed, while aggregate collection still works.
+		if _, err := admin.Exec(ctx, "REVOKE SELECT (average_speed) ON activities FROM endurain_exporter"); err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			if _, err := admin.Exec(ctx, "GRANT SELECT (average_speed) ON activities TO endurain_exporter"); err != nil {
+				t.Fatal(err)
+			}
+		}()
+		if _, err := readSnapshot(ctx, pool, 20000, true); err == nil {
+			t.Fatal("missing detail permissions ignored")
+		}
+		if _, err := load(ctx); err != nil {
+			t.Fatal("optional permissions broke aggregate mode")
 		}
 	})
 
@@ -220,7 +285,7 @@ func TestPostgres(t *testing.T) {
 		if w := scrape(handler, "/metrics", "Bearer "+testToken); !strings.Contains(w.Body.String(), "endurain_up 1") {
 			t.Fatal("schema recovery failed")
 		}
-		if _, err := readSnapshot(ctx, pool, 1); !errors.Is(err, errSeriesBudget) {
+		if _, err := readSnapshot(ctx, pool, 1, false); !errors.Is(err, errSeriesBudget) {
 			t.Fatal("SQL result budget not enforced")
 		}
 	})

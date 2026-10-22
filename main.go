@@ -62,8 +62,10 @@ func serve(ctx context.Context, c config) error {
 	}
 	defer pool.Close()
 	server := &http.Server{
-		Addr:              c.listen,
-		Handler:           newHandler(c, func(ctx context.Context) (snapshot, error) { return readSnapshot(ctx, pool, c.maxSeries) }),
+		Addr: c.listen,
+		Handler: newHandler(c, func(ctx context.Context) (snapshot, error) {
+			return readSnapshot(ctx, pool, c.maxSeries, c.activityDetails)
+		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       5 * time.Second,
 		WriteTimeout:      c.timeout + 5*time.Second,
