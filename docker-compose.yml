@@ -10,6 +10,7 @@ services:
       LISTEN_ADDRESS: ":9808"
       SCRAPE_TIMEOUT: ${SCRAPE_TIMEOUT:-5s}
       MAX_SERIES: ${MAX_SERIES:-20000}
+      ACTIVITY_DETAILS: ${ACTIVITY_DETAILS:-false}
     ports:
       - "127.0.0.1:${EXPORTER_PORT:-9808}:9808"
     networks:

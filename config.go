@@ -10,11 +10,12 @@ import (
 )
 
 type config struct {
-	databaseURL string
-	token       string
-	listen      string
-	timeout     time.Duration
-	maxSeries   int
+	databaseURL     string
+	token           string
+	listen          string
+	timeout         time.Duration
+	maxSeries       int
+	activityDetails bool
 }
 
 func secret(name string, required bool) (string, error) {
@@ -60,6 +61,12 @@ func loadConfig() (config, error) {
 		c.maxSeries, err = strconv.Atoi(value)
 		if err != nil || c.maxSeries < 1 || c.maxSeries > 1000000 {
 			return c, errors.New("MAX_SERIES must be between 1 and 1000000")
+		}
+	}
+	if value := os.Getenv("ACTIVITY_DETAILS"); value != "" {
+		c.activityDetails, err = strconv.ParseBool(value)
+		if err != nil {
+			return c, errors.New("ACTIVITY_DETAILS must be a boolean")
 		}
 	}
 	return c, nil

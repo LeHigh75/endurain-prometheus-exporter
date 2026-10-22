@@ -87,7 +87,7 @@ Règles de justesse et de coût :
 - Distinguer une absence d’activité, une valeur facultative inconnue et une erreur de collecte. Pour le dénivelé et l’énergie, omettre l’agrégat du couple utilisateur/sport/période si une valeur manque ou si la période est vide. Ne pas présenter une somme partielle comme un total individuel : voir les requêtes Grafana dans `OPERATIONS.md`.
 - Sur panne SQL ou erreur de schéma, exposer `endurain_up 0` et omettre les métriques métier du scrape concerné, sans réémettre un ancien résultat comme actuel.
 - Produire les métriques depuis le résultat courant : les utilisateurs et sports supprimés doivent disparaître des scrapes suivants.
-- Aucun label par activité, date, titre, email, nom, lieu ou coordonnée GPS.
+- En mode agrégé, aucun label par activité, date, titre, email, nom, lieu ou coordonnée GPS. Le mode facultatif `ACTIVITY_DETAILS=true` ajoute des gauges par activité avec identifiants et titre sur la seule métrique info, dans le même budget `MAX_SERIES`. Voir le README pour le contrat actuel.
 - Borner le budget de séries métier avec `MAX_SERIES` (20 000 par défaut, hors deux métriques de santé). En cas de dépassement, exposer `endurain_up 0`, omettre les métriques métier et journaliser `series_budget` ; ne jamais tronquer silencieusement les utilisateurs.
 - Des identifiants utilisateurs nécessitent une population bornée. Vérifier le volume avant de fixer le budget ; `topk()` dans Grafana ne réduit pas le nombre de séries ingérées.
 

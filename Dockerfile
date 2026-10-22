@@ -2,7 +2,7 @@ FROM --platform=$BUILDPLATFORM golang:1.27.3@sha256:957861185dbf29d93668ace41e01
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
-COPY *.go query.sql ./
+COPY *.go *.sql ./
 ARG TARGETOS
 ARG TARGETARCH
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags='-s -w' -o /exporter .

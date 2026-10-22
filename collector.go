@@ -29,8 +29,9 @@ type activityStats struct {
 }
 
 type snapshot struct {
-	users []int64
-	stats []activityStats
+	users   []int64
+	stats   []activityStats
+	details []activityDetail
 }
 
 func newPool(ctx context.Context, c config) (*pgxpool.Pool, error) {
@@ -47,7 +48,7 @@ func newPool(ctx context.Context, c config) (*pgxpool.Pool, error) {
 	return pgxpool.NewWithConfig(ctx, pc)
 }
 
-func readSnapshot(ctx context.Context, pool *pgxpool.Pool, maxSeries int) (snapshot, error) {
+func readSnapshot(ctx context.Context, pool *pgxpool.Pool, maxSeries int, activityDetails bool) (snapshot, error) {
 	var result snapshot
 	tx, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
@@ -83,6 +84,27 @@ func readSnapshot(ctx context.Context, pool *pgxpool.Pool, maxSeries int) (snaps
 	}
 	if len(result.stats) > maxSeries {
 		return result, errSeriesBudget
+	}
+	if activityDetails {
+		rows, err = tx.Query(ctx, detailQuery, maxSeries/6+1)
+		if err != nil {
+			return result, err
+		}
+		result.details, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (activityDetail, error) {
+			var detail activityDetail
+			dest := []any{&detail.user, &detail.sport, &detail.id, &detail.name}
+			for i := range detail.values {
+				dest = append(dest, &detail.values[i])
+			}
+			err := row.Scan(dest...)
+			return detail, err
+		})
+		if err != nil {
+			return result, err
+		}
+		if len(result.details) > maxSeries/6 {
+			return result, errSeriesBudget
+		}
 	}
 	return result, tx.Commit(ctx)
 }
@@ -135,6 +157,19 @@ func businessMetrics(s snapshot, maxSeries int) ([]prometheus.Metric, error) {
 			}
 		}
 	}
+	for _, row := range s.details {
+		labels := []string{strconv.FormatInt(row.user, 10), strconv.FormatInt(row.sport, 10), strconv.FormatInt(row.id, 10)}
+		if err := add(detailInfoDesc, 1, append(labels, row.name)...); err != nil {
+			return nil, err
+		}
+		for i, value := range row.values {
+			if value.Valid {
+				if err := add(detailDescs[i], value.Float64, labels...); err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
 	return metrics, nil
 }
 
@@ -147,6 +182,10 @@ type collector struct {
 func (c collector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- userDesc
 	for _, desc := range activityDescs {
+		ch <- desc
+	}
+	ch <- detailInfoDesc
+	for _, desc := range detailDescs {
 		ch <- desc
 	}
 	ch <- lastDesc

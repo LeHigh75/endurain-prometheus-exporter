@@ -1,0 +1,1196 @@
+{
+  "uid": "endurain-activity-details",
+  "id": null,
+  "title": "Endurain - Activity details",
+  "description": "Recorded statistics for one activity, selected independently of the dashboard time range. Missing measurements are not recorded values.",
+  "tags": [
+    "endurain",
+    "activity",
+    "prometheus"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 41,
+  "version": 0,
+  "editable": true,
+  "refresh": "1m",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "allowCustomValue": false,
+        "current": {},
+        "hide": 2,
+        "includeAll": false,
+        "label": "Data source",
+        "multi": false,
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
+      {
+        "allowCustomValue": false,
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(up{job=\"endurain\"}, instance)",
+        "hide": 2,
+        "includeAll": false,
+        "label": "Exporter",
+        "multi": false,
+        "name": "instance",
+        "options": [],
+        "query": "label_values(up{job=\"endurain\"}, instance)",
+        "refresh": 1,
+        "regex": "",
+        "regexApplyTo": "value",
+        "skipUrlSync": false,
+        "sort": 3,
+        "type": "query"
+      },
+      {
+        "allowCustomValue": false,
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(endurain_user_info{job=\"endurain\",instance=~\"${instance:regex}\"}, user_id)",
+        "hide": 0,
+        "includeAll": false,
+        "label": "User",
+        "multi": false,
+        "name": "user_id",
+        "options": [],
+        "query": "label_values(endurain_user_info{job=\"endurain\",instance=~\"${instance:regex}\"}, user_id)",
+        "refresh": 1,
+        "regex": "",
+        "regexApplyTo": "value",
+        "skipUrlSync": false,
+        "sort": 3,
+        "type": "query"
+      },
+      {
+        "name": "activity_id",
+        "label": "Activity",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "query": "query_result(label_join(endurain_activity_detail_info{job=\"endurain\",instance=~\"${instance:regex}\",user_id=~\"${user_id:regex}\"}, \"activity_label\", \" - \", \"activity_id\", \"activity_name\"))",
+        "definition": "query_result(label_join(endurain_activity_detail_info{job=\"endurain\",instance=~\"${instance:regex}\",user_id=~\"${user_id:regex}\"}, \"activity_label\", \" - \", \"activity_id\", \"activity_name\"))",
+        "regex": "/activity_id=\"(?<value>[^\"]+)\"|activity_label=\"(?<text>(?:\\\\.|[^\"\\\\])*)\"/g",
+        "refresh": 1,
+        "sort": 4,
+        "multi": false,
+        "includeAll": false,
+        "allowCustomValue": false,
+        "current": {},
+        "options": []
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "links": [
+    {
+      "title": "Activity overview",
+      "type": "link",
+      "url": "/d/endurain-activities/endurain",
+      "targetBlank": false
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "${activity_id:text}",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 18,
+        "h": 3
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Select a user and an activity above. Values are read from Endurain, including activities recorded before monitoring started. The date cards show the activity time; the dashboard time range does not filter the activity list.\n\nMissing sensor data is shown as **Not recorded**. Speeds are stored values and may differ from distance divided by duration."
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Collection status",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 3
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "min(up{job=\"endurain\",instance=~\"${instance:regex}\"}) * min(endurain_up{job=\"endurain\",instance=~\"${instance:regex}\"})",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unavailable",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Failed",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "Up to date",
+                  "color": "green"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "red"
+              },
+              {
+                "value": 1,
+                "color": "green"
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Start date",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dateTimeAsIso",
+          "decimals": 2,
+          "noValue": "Not recorded",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "(max(endurain_activity_detail_start_timestamp_seconds{job=\"endurain\",instance=~\"${instance:regex}\",user_id=~\"${user_id:regex}\",activity_id=~\"${activity_id:regex}\"}) * 1000) and on() (min(up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1 and min(endurain_up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1)",
+          "instant": true,
+          "range": false,
+          "legendFormat": "Start date"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "End date",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 3,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dateTimeAsIso",
+          "decimals": 2,
+          "noValue": "Not recorded",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "(max(endurain_activity_detail_end_timestamp_seconds{job=\"endurain\",instance=~\"${instance:regex}\",user_id=~\"${user_id:regex}\",activity_id=~\"${activity_id:regex}\"}) * 1000) and on() (min(up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1 and min(endurain_up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1)",
+          "instant": true,
+          "range": false,
+          "legendFormat": "End date"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Distance",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 3,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "lengthkm",
+          "decimals": 2,
+          "noValue": "Not recorded",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "(max(endurain_activity_detail_distance_meters{job=\"endurain\",instance=~\"${instance:regex}\",user_id=~\"${user_id:regex}\",activity_id=~\"${activity_id:regex}\"}) / 1000) and on() (min(up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1 and min(endurain_up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1)",
+          "instant": true,
+          "range": false,
+          "legendFormat": "Distance"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Active duration",
+      "description": "Active timer duration recorded by Endurain.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 3,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 2,
+          "noValue": "Not recorded",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "(max(endurain_activity_detail_duration_seconds{job=\"endurain\",instance=~\"${instance:regex}\",user_id=~\"${user_id:regex}\",activity_id=~\"${activity_id:regex}\"})) and on() (min(up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1 and min(endurain_up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1)",
+          "instant": true,
+          "range": false,
+          "legendFormat": "Active duration"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Elapsed duration",
+      "description": "Recorded elapsed duration, including pauses.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 2,
+          "noValue": "Not recorded",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "(max(endurain_activity_detail_elapsed_seconds{job=\"endurain\",instance=~\"${instance:regex}\",user_id=~\"${user_id:regex}\",activity_id=~\"${activity_id:regex}\"})) and on() (min(up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1 and min(endurain_up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1)",
+          "instant": true,
+          "range": false,
+          "legendFormat": "Elapsed duration"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Average speed",
+      "description": "Average speed recorded by Endurain; not recalculated.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 7,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "velocitykmh",
+          "decimals": 2,
+          "noValue": "Not recorded",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "(max(endurain_activity_detail_average_speed_meters_per_second{job=\"endurain\",instance=~\"${instance:regex}\",user_id=~\"${user_id:regex}\",activity_id=~\"${activity_id:regex}\"}) * 3.6) and on() (min(up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1 and min(endurain_up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1)",
+          "instant": true,
+          "range": false,
+          "legendFormat": "Average speed"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "Maximum speed",
+      "description": "Maximum speed recorded by Endurain; GPS spikes may affect this value.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 7,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "velocitykmh",
+          "decimals": 2,
+          "noValue": "Not recorded",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "(max(endurain_activity_detail_max_speed_meters_per_second{job=\"endurain\",instance=~\"${instance:regex}\",user_id=~\"${user_id:regex}\",activity_id=~\"${activity_id:regex}\"}) * 3.6) and on() (min(up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1 and min(endurain_up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1)",
+          "instant": true,
+          "range": false,
+          "legendFormat": "Maximum speed"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "Pace",
+      "description": "Recorded pace, displayed as time per kilometer.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 7,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 2,
+          "noValue": "Not recorded",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "(max(endurain_activity_detail_pace_seconds_per_meter{job=\"endurain\",instance=~\"${instance:regex}\",user_id=~\"${user_id:regex}\",activity_id=~\"${activity_id:regex}\"}) * 1000) and on() (min(up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1 and min(endurain_up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1)",
+          "instant": true,
+          "range": false,
+          "legendFormat": "Pace"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Elevation gain",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 11,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "lengthm",
+          "decimals": 2,
+          "noValue": "Not recorded",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "(max(endurain_activity_detail_elevation_gain_meters{job=\"endurain\",instance=~\"${instance:regex}\",user_id=~\"${user_id:regex}\",activity_id=~\"${activity_id:regex}\"})) and on() (min(up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1 and min(endurain_up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1)",
+          "instant": true,
+          "range": false,
+          "legendFormat": "Elevation gain"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "Elevation loss",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 11,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "lengthm",
+          "decimals": 2,
+          "noValue": "Not recorded",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "(max(endurain_activity_detail_elevation_loss_meters{job=\"endurain\",instance=~\"${instance:regex}\",user_id=~\"${user_id:regex}\",activity_id=~\"${activity_id:regex}\"})) and on() (min(up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1 and min(endurain_up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1)",
+          "instant": true,
+          "range": false,
+          "legendFormat": "Elevation loss"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 13,
+      "type": "stat",
+      "title": "Energy",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 11,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix:kcal",
+          "decimals": 2,
+          "noValue": "Not recorded",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "(max(endurain_activity_detail_energy_joules{job=\"endurain\",instance=~\"${instance:regex}\",user_id=~\"${user_id:regex}\",activity_id=~\"${activity_id:regex}\"}) / 4184) and on() (min(up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1 and min(endurain_up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1)",
+          "instant": true,
+          "range": false,
+          "legendFormat": "Energy"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 14,
+      "type": "stat",
+      "title": "Average heart rate",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 11,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bpm",
+          "decimals": 2,
+          "noValue": "Not recorded",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "(max(endurain_activity_detail_average_heart_rate_beats_per_minute{job=\"endurain\",instance=~\"${instance:regex}\",user_id=~\"${user_id:regex}\",activity_id=~\"${activity_id:regex}\"})) and on() (min(up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1 and min(endurain_up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1)",
+          "instant": true,
+          "range": false,
+          "legendFormat": "Average heart rate"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 15,
+      "type": "stat",
+      "title": "Maximum heart rate",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bpm",
+          "decimals": 2,
+          "noValue": "Not recorded",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "(max(endurain_activity_detail_max_heart_rate_beats_per_minute{job=\"endurain\",instance=~\"${instance:regex}\",user_id=~\"${user_id:regex}\",activity_id=~\"${activity_id:regex}\"})) and on() (min(up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1 and min(endurain_up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1)",
+          "instant": true,
+          "range": false,
+          "legendFormat": "Maximum heart rate"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 16,
+      "type": "stat",
+      "title": "Average power",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 15,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "watt",
+          "decimals": 2,
+          "noValue": "Not recorded",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "(max(endurain_activity_detail_average_power_watts{job=\"endurain\",instance=~\"${instance:regex}\",user_id=~\"${user_id:regex}\",activity_id=~\"${activity_id:regex}\"})) and on() (min(up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1 and min(endurain_up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1)",
+          "instant": true,
+          "range": false,
+          "legendFormat": "Average power"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 17,
+      "type": "stat",
+      "title": "Maximum power",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 15,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "watt",
+          "decimals": 2,
+          "noValue": "Not recorded",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "(max(endurain_activity_detail_max_power_watts{job=\"endurain\",instance=~\"${instance:regex}\",user_id=~\"${user_id:regex}\",activity_id=~\"${activity_id:regex}\"})) and on() (min(up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1 and min(endurain_up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1)",
+          "instant": true,
+          "range": false,
+          "legendFormat": "Maximum power"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 18,
+      "type": "stat",
+      "title": "Normalized power",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 15,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "watt",
+          "decimals": 2,
+          "noValue": "Not recorded",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "(max(endurain_activity_detail_normalized_power_watts{job=\"endurain\",instance=~\"${instance:regex}\",user_id=~\"${user_id:regex}\",activity_id=~\"${activity_id:regex}\"})) and on() (min(up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1 and min(endurain_up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1)",
+          "instant": true,
+          "range": false,
+          "legendFormat": "Normalized power"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 19,
+      "type": "stat",
+      "title": "Average cadence",
+      "description": "Recorded cadence; interpretation depends on the sport and source.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 19,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix:/min",
+          "decimals": 2,
+          "noValue": "Not recorded",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "(max(endurain_activity_detail_average_cadence_per_minute{job=\"endurain\",instance=~\"${instance:regex}\",user_id=~\"${user_id:regex}\",activity_id=~\"${activity_id:regex}\"})) and on() (min(up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1 and min(endurain_up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1)",
+          "instant": true,
+          "range": false,
+          "legendFormat": "Average cadence"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 20,
+      "type": "stat",
+      "title": "Maximum cadence",
+      "description": "Recorded cadence; interpretation depends on the sport and source.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 19,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix:/min",
+          "decimals": 2,
+          "noValue": "Not recorded",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "(max(endurain_activity_detail_max_cadence_per_minute{job=\"endurain\",instance=~\"${instance:regex}\",user_id=~\"${user_id:regex}\",activity_id=~\"${activity_id:regex}\"})) and on() (min(up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1 and min(endurain_up{job=\"endurain\",instance=~\"${instance:regex}\"}) == 1)",
+          "instant": true,
+          "range": false,
+          "legendFormat": "Maximum cadence"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    }
+  ]
+}
