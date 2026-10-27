@@ -17,7 +17,7 @@ func testConfig() config {
 
 func cleanEnvironment(t *testing.T) {
 	t.Helper()
-	for _, name := range []string{"DATABASE_URL", "DATABASE_URL_FILE", "METRICS_TOKEN", "METRICS_TOKEN_FILE", "LISTEN_ADDRESS", "SCRAPE_TIMEOUT", "MAX_SERIES", "ACTIVITY_DETAILS"} {
+	for _, name := range []string{"DATABASE_URL", "DATABASE_URL_FILE", "METRICS_TOKEN", "METRICS_TOKEN_FILE", "LISTEN_ADDRESS", "SCRAPE_TIMEOUT", "MAX_SERIES", "ACTIVITY_DETAILS", "WEB_CONFIG_FILE"} {
 		t.Setenv(name, "")
 	}
 	t.Setenv("DATABASE_URL", "postgres://user:development-password@localhost/database?sslmode=disable")
@@ -47,8 +47,9 @@ func TestConfig(t *testing.T) {
 	t.Setenv("MAX_SERIES", "100")
 	t.Setenv("ACTIVITY_DETAILS", "true")
 	t.Setenv("LISTEN_ADDRESS", "127.0.0.1:9809")
+	t.Setenv("WEB_CONFIG_FILE", "/run/config/web.yml")
 	c, err = loadConfig()
-	if err != nil || c.timeout != 2*time.Second || c.maxSeries != 100 || !c.activityDetails || c.listen != "127.0.0.1:9809" {
+	if err != nil || c.timeout != 2*time.Second || c.maxSeries != 100 || !c.activityDetails || c.webConfigFile != "/run/config/web.yml" || c.listen != "127.0.0.1:9809" {
 		t.Fatal("overrides not applied")
 	}
 }

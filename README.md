@@ -99,6 +99,37 @@ Use either example, not both at once. Metrics are available at `http://127.0.0.1
 
 **Optional authentication:** add `METRICS_TOKEN` to `.env` with at least 32 random printable ASCII characters without whitespace to require `Authorization: Bearer <token>`. Leave it unset to manage access through your network or reverse proxy.
 
+### Optional TLS, Basic Auth or mTLS
+
+[Prometheus exporter-toolkit](https://github.com/prometheus/exporter-toolkit) handles web security when `WEB_CONFIG_FILE` (or `--web.config.file`) points to a mounted YAML file. `--web.listen-address` overrides `LISTEN_ADDRESS`.
+
+Copy [web-config.example.yml](web-config.example.yml) to `web/web.config.yml`, add `server.crt` and `server.key` to that directory, and replace the bcrypt placeholder using `htpasswd -nBC 10 prometheus`. Ensure the container's UID **65532** can read these files. The sample enables HTTPS and Basic Auth; the [toolkit configuration](https://github.com/prometheus/exporter-toolkit/blob/v0.20.0/docs/web-configuration.md) also supports mutual TLS.
+
+Unset **both** `METRICS_TOKEN` and `METRICS_TOKEN_FILE` when using a web configuration. Combining the two security modes is rejected at startup.
+
+For Docker Compose, add the following to the exporter service:
+
+```yaml
+environment:
+  WEB_CONFIG_FILE: /etc/endurain-exporter/web.config.yml
+  METRICS_TOKEN: ""
+  METRICS_TOKEN_FILE: ""
+volumes:
+  - ./web:/etc/endurain-exporter:ro
+```
+
+For Docker Run, add these options before the image name:
+
+```bash
+-e WEB_CONFIG_FILE=/etc/endurain-exporter/web.config.yml \
+-e METRICS_TOKEN= -e METRICS_TOKEN_FILE= \
+-v "$PWD/web:/etc/endurain-exporter:ro"
+```
+
+Use `https://` in the Prometheus scrape configuration, with the matching CA and Basic Auth or client certificate. Credentials and certificates reload through the toolkit; changing between HTTP and HTTPS requires a restart. Mount the directory so atomic file replacements are visible.
+
+With a web configuration, security applies to **all HTTP routes**, including `/healthz`. The Docker healthcheck uses TCP for process liveness only; use an authenticated `/readyz` or `endurain_up` to check database collection. If container arguments override the listen address or web configuration, pass the same arguments to the healthcheck command, or use the environment variables.
+
 ## Metrics
 
 All metrics are **gauges**. Do not use `rate()` or `increase()` on these values.

@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
@@ -18,16 +19,16 @@ func TestHealthcheck(t *testing.T) {
 			w.WriteHeader(status)
 		}))
 		t.Setenv("LISTEN_ADDRESS", strings.TrimPrefix(server.URL, "http://"))
-		if err := healthcheck(); (err == nil) != (status == http.StatusOK) {
+		if err := healthcheck(os.Getenv("LISTEN_ADDRESS"), ""); (err == nil) != (status == http.StatusOK) {
 			t.Fatalf("status %d: unexpected health result", status)
 		}
 		server.Close()
-		if err := healthcheck(); err == nil {
+		if err := healthcheck(os.Getenv("LISTEN_ADDRESS"), ""); err == nil {
 			t.Fatal("closed endpoint reported healthy")
 		}
 	}
 	t.Setenv("LISTEN_ADDRESS", "invalid")
-	if err := healthcheck(); err == nil {
+	if err := healthcheck(os.Getenv("LISTEN_ADDRESS"), ""); err == nil {
 		t.Fatal("invalid address accepted")
 	}
 }

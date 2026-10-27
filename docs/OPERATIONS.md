@@ -31,12 +31,13 @@ Toutes les variables figurent dans [`.env.example`](../.env.example). Seule la c
 | --- | --- |
 | `DATABASE_URL` ou `DATABASE_URL_FILE` | Connexion avec le rôle dédié ; fichier contenant uniquement l’URL si le mode fichier est choisi |
 | `METRICS_TOKEN` ou `METRICS_TOKEN_FILE` | Authentification Bearer facultative ; token de 32 à 4 096 caractères ASCII imprimables sans espace, directement ou dans un fichier |
+| `WEB_CONFIG_FILE` | Fichier YAML exporter-toolkit pour TLS, Basic Auth ou mTLS ; exclusif avec les variables Bearer. Variante CLI : `--web.config.file` |
 | `LISTEN_ADDRESS` | Adresse HTTP, `:9808` par défaut |
 | `SCRAPE_TIMEOUT` | Budget global de collecte, `5s` par défaut ; de `1ms` à `1m` |
 | `ACTIVITY_DETAILS` | `false` par défaut ; active les statistiques par activité et leurs titres après application de `sql/grants-details.sql` |
 | `MAX_SERIES` | Budget de séries métier, `20000` par défaut ; de `1` à `1000000` |
 
-Ne pas définir simultanément la variable directe et sa variante `_FILE`. Sans token, l’exporter délègue le contrôle d’accès au réseau ou au reverse proxy choisi par l’administrateur. Avec un token, `/metrics` et `/readyz` exigent un en-tête Bearer valide ; le token n’est jamais accepté dans l’URL. Un fichier secret explicitement configuré doit être lisible et non vide : une erreur de fichier arrête le démarrage. Les secrets sont chargés au démarrage : recréer ou redémarrer l’exporter après rotation.
+Ne pas définir simultanément la variable directe et sa variante `_FILE`. Sans token, l’exporter délègue le contrôle d’accès au réseau ou au reverse proxy choisi par l’administrateur. Avec un token, `/metrics` et `/readyz` exigent un en-tête Bearer valide ; le token n’est jamais accepté dans l’URL. Un fichier secret explicitement configuré doit être lisible et non vide : une erreur de fichier arrête le démarrage. Les secrets Bearer et PostgreSQL sont chargés au démarrage : recréer ou redémarrer l’exporter après rotation. Le fichier `WEB_CONFIG_FILE` et ses certificats sont rechargés par exporter-toolkit ; monter leur répertoire en lecture seule et conserver des droits de lecture pour UID 65532. Un fichier initial invalide empêche le démarrage, sans repli vers HTTP non protégé. Le passage entre HTTP et HTTPS exige un redémarrage. Les options `--web.listen-address` et `--web.config.file` doivent aussi être transmises au healthcheck si elles remplacent les valeurs d’environnement.
 
 Avec un agent OpenBao qui exporte des champs normalisés dans un `.env`, les champs `database.url` et `metrics.token` deviennent `DATABASE_URL` et `METRICS_TOKEN`. Préserver les autres champs avec un CAS lors des mises à jour KV v2. Vérifier la relecture dans Bao et le fichier rendu sans afficher leurs valeurs.
 
@@ -64,7 +65,7 @@ Définir aussi `ENDURAIN_NETWORK` avec le nom du réseau Docker de PostgreSQL. L
 ## Endpoints et scrape
 
 - `GET /metrics` : accès direct si aucun token n’est configuré. Avec un token configuré, un Bearer absent ou incorrect donne `401`, sans requête SQL. La réponse utilise `Cache-Control: no-store`.
-- `GET /healthz` : `200` lorsque le processus HTTP fonctionne ; n’interroge pas PostgreSQL.
+- `GET /healthz` : `200` lorsque le processus HTTP fonctionne ; n’interroge pas PostgreSQL. Avec exporter-toolkit, les protections du fichier web s’appliquent aussi à cette route. Le healthcheck Docker utilise alors TCP pour la seule présence du processus ; `/readyz` authentifié et `endurain_up` vérifient la collecte SQL.
 - `GET /readyz` : même mode d’authentification que `/metrics` ; `200` si la collecte complète est disponible, `503` en cas de panne, schéma incompatible ou budget dépassé.
 - Une collecte en échec répond sur `/metrics` avec `endurain_up 0` et la durée de collecte, sans métriques métier anciennes, partielles ou mises à zéro.
 
