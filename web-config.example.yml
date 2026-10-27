@@ -1,0 +1,11 @@
+# Copy to web/web.config.yml and provide certificates readable by UID 65532.
+# Relative certificate paths are resolved against this configuration file.
+tls_server_config:
+  cert_file: server.crt
+  key_file: server.key
+  min_version: TLS12
+
+# Generate the bcrypt hash interactively: htpasswd -nBC 10 prometheus
+# Replace the placeholder; never store the plaintext password here.
+basic_auth_users:
+  prometheus: REPLACE_WITH_BCRYPT_HASH

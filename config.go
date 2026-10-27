@@ -16,6 +16,7 @@ type config struct {
 	timeout         time.Duration
 	maxSeries       int
 	activityDetails bool
+	webConfigFile   string
 }
 
 func secret(name string, required bool) (string, error) {
@@ -39,6 +40,7 @@ func secret(name string, required bool) (string, error) {
 func loadConfig() (config, error) {
 	c := config{listen: ":9808", timeout: 5 * time.Second, maxSeries: 20000}
 	var err error
+	c.webConfigFile = os.Getenv("WEB_CONFIG_FILE")
 	if c.databaseURL, err = secret("DATABASE_URL", true); err != nil {
 		return c, err
 	}

@@ -11,10 +11,11 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/prometheus/exporter-toolkit/web"
 )
 
-func healthcheck() error {
-	address := os.Getenv("LISTEN_ADDRESS")
+func healthcheck(address, webConfigFile string) error {
 	if address == "" {
 		address = ":9808"
 	}
@@ -27,6 +28,14 @@ func healthcheck() error {
 	}
 	if host == "::" {
 		host = "::1"
+	}
+	if webConfigFile != "" {
+		// Toolkit auth/mTLS protects every route; TCP is process liveness only.
+		connection, err := net.DialTimeout("tcp", net.JoinHostPort(host, port), 3*time.Second)
+		if err != nil {
+			return errors.New("healthcheck connection failed")
+		}
+		return connection.Close()
 	}
 	client := http.Client{Timeout: 3 * time.Second}
 	response, err := client.Get("http://" + net.JoinHostPort(host, port) + "/healthz")
@@ -41,21 +50,33 @@ func healthcheck() error {
 }
 
 func run() error {
-	check := flag.Bool("healthcheck", false, "check the local HTTP liveness endpoint")
+	check := flag.Bool("healthcheck", false, "check local process liveness")
+	listen := flag.String("web.listen-address", os.Getenv("LISTEN_ADDRESS"), "HTTP(S) listen address (default :9808)")
+	webConfig := flag.String("web.config.file", os.Getenv("WEB_CONFIG_FILE"), "Exporter Toolkit web configuration file")
 	flag.Parse()
 	if *check {
-		return healthcheck()
+		return healthcheck(*listen, *webConfig)
 	}
 	c, err := loadConfig()
 	if err != nil {
 		return err
 	}
+	if *listen != "" {
+		c.listen = *listen
+	}
+	c.webConfigFile = *webConfig
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	return serve(ctx, c)
 }
 
 func serve(ctx context.Context, c config) error {
+	if c.webConfigFile != "" && c.token != "" {
+		return errors.New("use WEB_CONFIG_FILE or METRICS_TOKEN, not both")
+	}
+	if err := web.Validate(c.webConfigFile); err != nil {
+		return errors.New("invalid exporter-toolkit web configuration")
+	}
 	pool, err := newPool(ctx, c)
 	if err != nil {
 		return err
@@ -76,8 +97,11 @@ func serve(ctx context.Context, c config) error {
 	if err != nil {
 		return errors.New("cannot listen on LISTEN_ADDRESS")
 	}
+	defer listener.Close()
 	finished := make(chan error, 1)
-	go func() { finished <- server.Serve(listener) }()
+	go func() {
+		finished <- web.Serve(listener, server, &web.FlagConfig{WebConfigFile: &c.webConfigFile}, slog.Default())
+	}()
 	slog.Info("exporter listening", "address", c.listen)
 	select {
 	case err := <-finished:
