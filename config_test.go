@@ -9,10 +9,8 @@ import (
 	"time"
 )
 
-const testToken = "development-only-metrics-token-change-me"
-
 func testConfig() config {
-	return config{token: testToken, timeout: time.Second, maxSeries: 20000}
+	return config{timeout: time.Second, maxSeries: 20000}
 }
 
 func cleanEnvironment(t *testing.T) {
@@ -21,7 +19,6 @@ func cleanEnvironment(t *testing.T) {
 		t.Setenv(name, "")
 	}
 	t.Setenv("DATABASE_URL", "postgres://user:development-password@localhost/database?sslmode=disable")
-	t.Setenv("METRICS_TOKEN", testToken)
 }
 
 func TestConfig(t *testing.T) {
@@ -31,8 +28,7 @@ func TestConfig(t *testing.T) {
 		t.Fatalf("unexpected defaults or configuration error: %v", err)
 	}
 	for _, tc := range []struct{ name, value string }{
-		{"ACTIVITY_DETAILS", "invalid"}, {"DATABASE_URL", ""}, {"METRICS_TOKEN", "too-short"},
-		{"METRICS_TOKEN", testToken + "\n"}, {"METRICS_TOKEN", testToken + "\x7f"},
+		{"ACTIVITY_DETAILS", "invalid"}, {"DATABASE_URL", ""},
 		{"SCRAPE_TIMEOUT", "0s"}, {"SCRAPE_TIMEOUT", "-1s"}, {"SCRAPE_TIMEOUT", "2m"}, {"SCRAPE_TIMEOUT", "invalid"},
 		{"MAX_SERIES", "0"}, {"MAX_SERIES", "-1"}, {"MAX_SERIES", "1000001"}, {"MAX_SERIES", "invalid"},
 	} {
@@ -54,18 +50,21 @@ func TestConfig(t *testing.T) {
 	}
 }
 
-func TestTokenIsOptional(t *testing.T) {
-	cleanEnvironment(t)
-	t.Setenv("METRICS_TOKEN", "")
-	c, err := loadConfig()
-	if err != nil || c.token != "" {
-		t.Fatal("configuration without a token should be accepted")
+func TestRemovedBearerSettingsFailClosed(t *testing.T) {
+	for _, name := range []string{"METRICS_TOKEN", "METRICS_TOKEN_FILE"} {
+		t.Run(name, func(t *testing.T) {
+			cleanEnvironment(t)
+			t.Setenv(name, "obsolete-setting-must-not-be-ignored")
+			if _, err := loadConfig(); err == nil {
+				t.Fatal("removed Bearer setting silently disabled access control")
+			}
+		})
 	}
 }
 
 func TestFileSecrets(t *testing.T) {
 	cleanEnvironment(t)
-	for _, name := range []string{"METRICS_TOKEN", "DATABASE_URL"} {
+	for _, name := range []string{"DATABASE_URL"} {
 		t.Run(name, func(t *testing.T) {
 			value := os.Getenv(name)
 			path := filepath.Join(t.TempDir(), "secret")

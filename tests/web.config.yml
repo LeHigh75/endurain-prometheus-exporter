@@ -1,0 +1,3 @@
+# Public demonstration credentials for the isolated development stack only.
+basic_auth_users:
+  prometheus: $2a$04$M46sm5JnJ4Nz8cQfxrhztOVIE/AXXcUqTA5/7pnFZvA2Sgwl8VAZS

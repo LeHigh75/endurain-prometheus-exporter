@@ -30,10 +30,12 @@ services:
     image: endurain-prometheus-exporter:test
     environment:
       DATABASE_URL: postgresql://endurain_exporter:development-only-exporter-password@database:5432/endurain_exporter_test?sslmode=disable
-      METRICS_TOKEN: ${METRICS_TOKEN-development-only-metrics-token-change-me}
+      WEB_CONFIG_FILE: ${WEB_CONFIG_FILE-/etc/endurain-exporter/web.config.yml}
       ACTIVITY_DETAILS: "true"
     ports:
       - "127.0.0.1:${EXPORTER_PORT:-9808}:9808"
+    volumes:
+      - ./tests/web.config.yml:/etc/endurain-exporter/web.config.yml:ro
     depends_on:
       database:
         condition: service_healthy

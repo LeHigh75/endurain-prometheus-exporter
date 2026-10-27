@@ -137,7 +137,7 @@ func TestPostgres(t *testing.T) {
 		requireMetric(t, families, "endurain_activity_detail_info", map[string]string{"user_id": "1", "sport_id": "1", "activity_id": "1", "activity_name": `Synthetic ride "quoted"`}, 1)
 		c.activityDetails = true
 		detailHandler := newHandler(c, func(ctx context.Context) (snapshot, error) { return readSnapshot(ctx, pool, c.maxSeries, true) })
-		response := scrape(detailHandler, "/metrics", "Bearer "+testToken)
+		response := scrape(detailHandler, "/metrics", "")
 		if !strings.Contains(response.Body.String(), "endurain_activity_detail_info{") || strings.Contains(response.Body.String(), "synthetic-alice") {
 			t.Fatal("detail HTTP exposition failed or exposed a user name")
 		}
@@ -230,14 +230,14 @@ func TestPostgres(t *testing.T) {
 		if _, err := admin.Exec(ctx, "INSERT INTO public.users(id) VALUES(4); INSERT INTO public.activities(user_id,activity_type,distance,total_timer_time,start_time) VALUES(4,987654,99,1,now());"); err != nil {
 			t.Fatal(err)
 		}
-		w := scrape(handler, "/metrics", "Bearer "+testToken)
+		w := scrape(handler, "/metrics", "")
 		if !strings.Contains(w.Body.String(), `endurain_activity_distance_meters{period="all",sport_id="987654",user_id="4"} 99`) {
 			t.Fatal("new user or unknown sport not discovered")
 		}
 		if _, err := admin.Exec(ctx, "DELETE FROM public.users WHERE id=4; DELETE FROM public.activities WHERE user_id=1 AND activity_type=2;"); err != nil {
 			t.Fatal(err)
 		}
-		w = scrape(handler, "/metrics", "Bearer "+testToken)
+		w = scrape(handler, "/metrics", "")
 		if strings.Contains(w.Body.String(), `user_id="4"`) || strings.Contains(w.Body.String(), `sport_id="2"`) {
 			t.Fatal("deleted series retained")
 		}
@@ -272,17 +272,17 @@ func TestPostgres(t *testing.T) {
 				t.Fatal(err)
 			}
 		}()
-		w := scrape(handler, "/metrics", "Bearer "+testToken)
+		w := scrape(handler, "/metrics", "")
 		if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "endurain_up 0") || strings.Contains(w.Body.String(), "endurain_user_info") {
 			t.Fatal("schema error exposed stale or partial data")
 		}
-		if w := scrape(handler, "/readyz", "Bearer "+testToken); w.Code != 503 {
+		if w := scrape(handler, "/readyz", ""); w.Code != 503 {
 			t.Fatal("schema error not detected by readiness")
 		}
 	})
 
 	t.Run("recovered_and_budget_enforced", func(t *testing.T) {
-		if w := scrape(handler, "/metrics", "Bearer "+testToken); !strings.Contains(w.Body.String(), "endurain_up 1") {
+		if w := scrape(handler, "/metrics", ""); !strings.Contains(w.Body.String(), "endurain_up 1") {
 			t.Fatal("schema recovery failed")
 		}
 		if _, err := readSnapshot(ctx, pool, 1, false); !errors.Is(err, errSeriesBudget) {

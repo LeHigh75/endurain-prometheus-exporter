@@ -48,7 +48,7 @@ jobs:
         run: python3 tests/smoke.py
       - name: Smoke test without builtin authentication
         env:
-          METRICS_TOKEN: ""
+          WEB_CONFIG_FILE: ""
         run: |
           docker compose -f docker-compose.dev.yml up -d --wait exporter
           python3 tests/smoke.py

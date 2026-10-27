@@ -5,8 +5,6 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL required}
-      METRICS_TOKEN: ${METRICS_TOKEN:-}
-      METRICS_TOKEN_FILE: ${METRICS_TOKEN_FILE:-}
       LISTEN_ADDRESS: ":9808"
       SCRAPE_TIMEOUT: ${SCRAPE_TIMEOUT:-5s}
       MAX_SERIES: ${MAX_SERIES:-20000}

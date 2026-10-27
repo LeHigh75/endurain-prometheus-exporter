@@ -71,9 +71,6 @@ func run() error {
 }
 
 func serve(ctx context.Context, c config) error {
-	if c.webConfigFile != "" && c.token != "" {
-		return errors.New("use WEB_CONFIG_FILE or METRICS_TOKEN, not both")
-	}
 	if err := web.Validate(c.webConfigFile); err != nil {
 		return errors.New("invalid exporter-toolkit web configuration")
 	}
