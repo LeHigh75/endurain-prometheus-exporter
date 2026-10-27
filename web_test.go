@@ -96,7 +96,6 @@ func TestToolkitTLSBasicAuthAndReload(t *testing.T) {
 	}
 	replaceWebConfig(t, file, configFor("demo-first-password"))
 	c := testConfig()
-	c.token = ""
 	var calls atomic.Int64
 	handler := newHandler(c, func(context.Context) (snapshot, error) { calls.Add(1); return snapshot{users: []int64{1}}, nil })
 	address := startTestWeb(t, file, handler)
@@ -163,7 +162,6 @@ func TestToolkitMutualTLSAndLiveness(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "web.yml")
 	replaceWebConfig(t, file, "tls_server_config:\n  cert_file: "+cert+"\n  key_file: "+key+"\n  client_auth_type: RequireAndVerifyClientCert\n  client_ca_file: "+cert+"\n")
 	c := testConfig()
-	c.token = ""
 	var calls atomic.Int64
 	address := startTestWeb(t, file, newHandler(c, func(context.Context) (snapshot, error) { calls.Add(1); return snapshot{}, nil }))
 	transport := &http.Transport{TLSClientConfig: &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12}}
@@ -198,7 +196,6 @@ func TestToolkitMutualTLSAndLiveness(t *testing.T) {
 func TestInvalidWebConfigFailsStartup(t *testing.T) {
 	c := testConfig()
 	c.databaseURL = "postgres://invalid:1/database"
-	c.token = ""
 	c.webConfigFile = filepath.Join(t.TempDir(), "missing-secret")
 	for _, content := range []string{"", "basic_auth_users: [private-secret", "basic_auth_users:\n  prometheus: not-a-bcrypt-hash\n", "tls_server_config:\n  cert_file: missing.crt\n  key_file: missing.key\n"} {
 		if content != "" {
@@ -208,10 +205,7 @@ func TestInvalidWebConfigFailsStartup(t *testing.T) {
 			t.Fatal("unsafe web configuration startup result", err)
 		}
 	}
-	c.token = testToken
-	if err := serve(context.Background(), c); err == nil {
-		t.Fatal("Bearer and toolkit configuration accepted together")
-	}
+
 }
 
 func TestApplicationServesThroughToolkit(t *testing.T) {
@@ -231,7 +225,6 @@ func TestApplicationServesThroughToolkit(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := testConfig()
-	c.token = ""
 	c.webConfigFile = file
 	c.listen = address
 	c.databaseURL = "postgres://test:public-demo-password@127.0.0.1:1/unused?sslmode=disable"
